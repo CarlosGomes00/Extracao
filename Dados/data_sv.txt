@@ -1,0 +1,17 @@
+Sample_Id	Site1_Hugo_Symbol	Site2_Hugo_Symbol	RNA_support	SV_Status	Method	Event_Info
+aml_ohsu_2018_13-00615	RUNX1	RUNX1T1	Yes	SOMATIC	TopHat-Fusion	RUNX1-RUNX1T1 fusion
+aml_ohsu_2018_14-00041	GATA2	MECOM	Yes	SOMATIC	TopHat-Fusion	GATA2-MECOM fusion
+aml_ohsu_2018_14-00613	CBFB	MYH11	Yes	SOMATIC	TopHat-Fusion	CBFB-MYH11 fusion
+aml_ohsu_2018_14-00643	RUNX1	RUNX1T1	Yes	SOMATIC	TopHat-Fusion	RUNX1-RUNX1T1 fusion
+aml_ohsu_2018_14-00798	CBFB	MYH11	Yes	SOMATIC	TopHat-Fusion	CBFB-MYH11 fusion
+aml_ohsu_2018_14-00831	PML	RARA	Yes	SOMATIC	TopHat-Fusion	PML-RARA fusion
+aml_ohsu_2018_15-00633	MLLT3	KMT2A	Yes	SOMATIC	TopHat-Fusion	MLLT3-KMT2A fusion
+aml_ohsu_2018_15-00756	RUNX1	RUNX1T1	Yes	SOMATIC	TopHat-Fusion	RUNX1-RUNX1T1 fusion
+aml_ohsu_2018_15-00807	RUNX1	RUNX1T1	Yes	SOMATIC	TopHat-Fusion	RUNX1-RUNX1T1 fusion
+aml_ohsu_2018_15-00974	GATA2	MECOM	Yes	SOMATIC	TopHat-Fusion	GATA2-MECOM fusion
+aml_ohsu_2018_16-00120	PML	RARA	Yes	SOMATIC	TopHat-Fusion	PML-RARA fusion
+aml_ohsu_2018_16-00410	PML	RARA	Yes	SOMATIC	TopHat-Fusion	PML-RARA fusion
+aml_ohsu_2018_16-00510	GATA2	MECOM	Yes	SOMATIC	TopHat-Fusion	GATA2-MECOM fusion
+aml_ohsu_2018_16-00547	MLLT3	KMT2A	Yes	SOMATIC	TopHat-Fusion	MLLT3-KMT2A fusion
+aml_ohsu_2018_16-00818	GATA2	MECOM	Yes	SOMATIC	TopHat-Fusion	GATA2-MECOM fusion
+aml_ohsu_2018_16-01262	PML	RARA	Yes	SOMATIC	TopHat-Fusion	PML-RARA fusion
