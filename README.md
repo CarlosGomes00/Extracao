@@ -3,3 +3,6 @@ Trabalho realizado no âmbito da unidade curricular 'Extração de Conhecimento 
 
 ### Grupo: 
 Carlos Gomes (pg51681), Laís Carvalho (pg52536) e Rita Nóbrega (pg46733).
+
+### Tema:
+Dados de sequenciação do exoma completo, sequênciação de RNA e testes ex vivo de sensibilidade a terapias de pacientes com leucemia mieloide aguda.
