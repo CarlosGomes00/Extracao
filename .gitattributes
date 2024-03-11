@@ -1,0 +1,2 @@
+Dados/data_mrna_seq_rpkm.txt filter=lfs diff=lfs merge=lfs -text
+Dados/data_mrna_seq_cpm.txt filter=lfs diff=lfs merge=lfs -text
