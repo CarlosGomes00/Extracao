@@ -1,0 +1,53 @@
+---
+title: "Relatório sobre dados de RNA-seq de pacientes com Leucemia Mielóide Aguda" 
+output: 
+  html_document:
+    theme: flatly
+date: '`r Sys.Date()`'
+author: "Carlos Gomes (PG51681), Laís Carvalho (PG52536) e Rita Nóbrega (PG46733)" 
+---
+
+<img src="EEUM_logo.jpg" alt="Logo da Empresa" style="float:right; margin: 10px 10px 0 0; width: 110px; height: auto;"/>
+
+## Introdução
+
+**LMA**
+
+**Explicação, origem e relevância dos dados**
+
+O conjunto de dados selecionados para este trabalho foram retirados de um estudo cohort com 672 amostras recolhidas através de biopsias a 562 pacientes com Leucemia Mielóide Aguda (LMA) (Tyner et al., 2018). Com o objetivo de correlacionar a sensibilidade e resistência de grupos de pacientes com LMA a tratamentos já existentes com a ocorrência de mutações, foram realizadas anotações clínicas detalhadas, estudos genómicos e transcriptómicos (com a sequenciação do exoma (622 amostras) e do RNA (451 amostras)), assim como testes *ex vivo* de sensibilidade a compostos. Os dados e estudo original podem ser consultados através do Genomic Data Commons (GDC) em <https://www.cbioportal.org/study/summary?id=aml_ohsu_2018>.
+
+
+Este trabalho tem como objetivo analisar os dados de expressão de pacientes com AML, comparando os seus dados transcriptómicos com amostras controlo (saudáveis), com vista a obter informações sobre genes diferencialmente expressos e enriquecidos, clusters de genes e/ou de amostras e que genes parecem ter maior importância no transcriptoma associado a AML.
+
+## Preparação e pré-processamento dos dados
+
+```{r Pré-processamento dos dados}
+#carregamento dos dados atrvés do repositório online (https://media.githubusercontent.com/media/lais-carvalho/Trabalho-pratico/main/Dados/data_mrna_seq_cpm.txt)
+RNA_cpm_Url = "https://media.githubusercontent.com/media/lais-carvalho/Trabalho-pratico/main/Dados/data_mrna_seq_cpm.txt"
+download.file(RNA_cpm_Url, destfile="RNA_seq_cpm.txt")  
+rna_cpm = read.table("RNA_seq_cpm.txt", header = T, sep = '\t')
+View(rna_cpm)
+#preparação
+#pré-processamento
+#filtragem
+
+```
+
+## Sumarização dos dados
+
+```{r Sumarização dos dados}
+#estatistica descritiva
+#gráficos
+```
+
+## Análise estatítica Univariada: expressão diferencial e enriquecimento
+
+```{r Análise dos dados}
+#análise de expressão diferencial
+#analise de enriquecimento
+```
+
+## Referências
+
+Tyner, J. W., Tognon, C. E., Bottomly, D., Wilmot, B., Kurtz, S. E., Savage, S. L., Long, N., Schultz, A. R., Traer, E., Abel, M., Agarwal, A., Blucher, A., Borate, U., Bryant, J., Burke, R., Carlos, A., Carpenter, R., Carroll, J., Chang, B. H., Coblentz, C., … Druker, B. J. (2018). Functional genomic landscape of acute myeloid leukaemia. Nature, 562(7728), 526–531. <https://doi.org/10.1038/s41586-018-0623-z>
