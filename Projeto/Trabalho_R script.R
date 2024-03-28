@@ -3,6 +3,7 @@ library(readr)
 library(readxl)
 library(data.table)
 library(tibble)
+library(genefilter)
 #library(tidyverse)
 library(arules)
 library(dplyr)
@@ -19,69 +20,107 @@ library(RColorBrewer)
 library(gplots)
 #library(FactoMineR)
 #library(factoextra)
+library(stringr)
+library(sparseMatrixStats)
+library(DelayedMatrixStats)
 
 # Carregamento dos dados através do url: https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/
 
 # Primeiro associamos o url a uma variável
-RNA_rpkm_zscore_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_mrna_seq_rpkm_zscores_ref_all_samples.txt"
+RNA_cpm_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_mrna_seq_cpm.txt"
 data_patient_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_clinical_patient.txt"
 data_sample_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_clinical_sample.txt"
-
+data_mutations_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_mutations.txt"
 # Depois fazemos o download do ficheiro no url e guardamos uma cópia local 
-download.file(RNA_rpkm_zscore_url, destfile="RNA_seq_rpkm_zscore.txt")
+download.file(RNA_cpm_url, destfile="RNA_seq_cpm.txt")
 download.file(data_patient_url, destfile="data_patient.txt") 
 download.file(data_sample_url, destfile ="data_sample.txt")
+download.file(data_mutations_url, destfile="data_mutations.txt")
 
 # Leitura do ficheiro 
-rna_rpkm_zscore = read.table("RNA_seq_rpkm_zscore.txt", header = T, sep = '\t')
+RNA_cpm = read.table("RNA_seq_cpm.txt", header = T, sep = '\t')
 data_patient = read.table("data_patient.txt", header = T, sep = '\t')
 data_sample = read_tsv("data_sample.txt", na = "")
+data_mutations = read.table("data_mutations.txt", header = T, sep = '\t')
 
-# Verificar a estrutura dos dados
-class(rna_rpkm_zscore)
-## É um dataframe, o que é o suposto
+## Verificar a estrutura dos dados ##
+class(RNA_cpm)
+# É um dataframe, o que é o suposto
 
-# Verificação da classe de cada coluna 
-unlist(lapply(rna_rpkm_zscore,class))  
-## todas têm a classe suposto (ou seja, o nome dos genes é visto como string e os z-cores sao numéricos)
+## Verificação da classe de cada coluna ##
+unlist(lapply(RNA_cpm,class))  
+# todas têm a classe suposto (ou seja, o nome dos genes é visto como string e nas colunas relativas às amostras sao numéricos)
+#a unica que está "estranha" é a 2ª coluna
 
-# Dimensão do dataframe
-dim(rna_rpkm_zscore)
+## Dimensão do dataframe ##
+dim(RNA_cpm)
 # temos 22843 linhas e 453 colunas
-# dado que os genes estão representados nas linhas e as amostras estão representadas nas colunas, isto significa que temos 22842 genes nesta análise e (dado que há um coluna vazia) temos 251 amostras tal como esperado
-# Verificar se as colunas são as corretas
-rownames(rna_rpkm_zscore) #como esperado o nome dos genes não está associado ao nome das linhas porque não o conseguimos fazer aquando da função read.table()
+# dado que os genes estão representados nas linhas e as amostras estão representadas nas colunas, isto significa que temos, no total, 22843 genes nesta análise e (dado que há um coluna vazia e a 1ª coluna são o nome dos genes) temos 251 amostras tal como esperado
+
+## Verificar se o nome das linhas está associado aos genes e as colunas às amostras ##
+colnames(RNA_cpm)  #já sabiamos isto devido ao termos verificado a class de cada coluna
+# estes nomes são muito longos e dificeis de perceber por isso podemos encolhê-los para só terem informação relevante para a identificação da amostra
+#retirando o 'aml_oshu_2018_' que está presente no inicio do nome de todas as amostras e apenas se refere ao paper associado a este dataset
+colnames(RNA_cpm)[-c(1, 2)] = str_sub(colnames(RNA_cpm)[-c(1, 2)], 15, 22)  #aqui ignoramos as duas primeiras colunas e mudamos o nome das outras
+# vamos que ter cuidado porque nos metadados o nome das amostras não é exatamente igual a este por isso teremos que mudar para corresponder
+colnames(RNA_cpm)
+
+head(rownames(RNA_cpm)) #como esperado o nome dos genes não está associado ao nome das linhas porque não o conseguimos fazer aquando da função read.table()
 # há nomes duplicados por isso temos que encontrar os que estão duplicados e adicionar um '_duplicado' para sabermos que o são e conseguirmos associar o nome dos genes às linhas
 
-which(duplicated(rna_rpkm_zscore[,1])) # há 6 genes que têm os nomes repetidos
-rna_rpkm_zscore[which(duplicated(rna_rpkm_zscore[,1])),1]
-which(rna_rpkm_zscore == 'BTBD8', arr.ind = T)
-which(rna_rpkm_zscore == 'COMMD9', arr.ind = T)
+which(duplicated(RNA_cpm[,1])) # há 6 genes que têm os nomes repetidos
+RNA_cpm[which(duplicated(RNA_cpm[,1])),1]  #para obter o nome dos genes duplicados
+which(RNA_cpm == 'BTBD8', arr.ind = T)     #para verificar que de facto o nome está duplicado
 #depois de verificação manual de dois exemplos destes nomes de genes duplicados, verificámos que de facto o nome é o mesmo porém os valores de Z-cores são diferentes
 #isto faz com que tenhamos de os distinguir adicionando no final do duplicado '_duplicado'
-rna_rpkm_zscore[which(duplicated(rna_rpkm_zscore[,1])),1] <- paste(rna_rpkm_zscore[which(duplicated(rna_rpkm_zscore[,1])),1], "_duplicado", sep = "")
-which(duplicated(rna_rpkm_zscore[,1]))
-rna_rpkm_zscore[13532, 1]
+RNA_cpm[which(duplicated(RNA_cpm[,1])),1] = paste(RNA_cpm[which(duplicated(RNA_cpm[,1])),1], "_duplicado", sep = "")
+which(duplicated(RNA_cpm[,1]))
+RNA_cpm[13532, 1]
 #os nomes duplicados foram tratados por isso já podemos associar o nome dos genes às linhas
-rownames(rna_rpkm_zscore) = rna_rpkm_zscore[, 1]
-rownames(rna_rpkm_zscore)
+rownames(RNA_cpm) = RNA_cpm[, 1]
+rownames(RNA_cpm)
 
-# Verificar se existem missing values
-any(is.na(rna_rpkm_zscore))
+## Verificar se existem missing values ##
+any(is.na(RNA_cpm))
 # Suspeitamos que os valores da coluna 'Entrez_gene_id' são os únicos valores únicos por isso vamos eliminar esta coluna do dataframe
-rna_rpkm_zscore$Entrez_Gene_Id <- NULL
+RNA_cpm$Entrez_Gene_Id <- NULL
 # Verificar outra vez se ainda há missing values
-sum(is.na(rna_rpkm_zscore)) # ainda há 8118 valores omissos no nosso dataset
-# Os valores omissos (NA) não nos vão permitir realizar análises posteriores com estes dados logo temos que tratar estes NA de alguma forma
-# Provavelmente a melhor opção é substituir os NA pela média de cada coluna dado que uma coluna é uma amostra e uma linha um gene 
-#( acho que o que faz mais sentido é substituir pelo valor média da amostra e não do gene porque amostras diferentes podem comportar-se de maneira diferente consoante o gene)
-for (i in 2:ncol(rna_rpkm_zscore)){
-  m = mean(rna_rpkm_zscore[, i], na.rm = T)
-  rna_rpkm_zscore[is.na(rna_rpkm_zscore[,i]), i] = m
+any(is.na(RNA_cpm))
+# Já não existem NA no nosso dataset
+
+## Pré-processamento dos dados feito anteriormente ##
+# O nosso dataset consiste em valores CPM (counts per million), uma medida usada para normalizar a expressão génica e facilitar a comparação entre amostras com nº total de reads diferentes
+# Valor CPM = Raw count para 1 gene / 1 milhão / número total de reads mapeadas na amostra
+# Ou seja, quanto maior for o CPM, maior o na expressão de determinado gene numa determinada amostra (relativamente a outros genes na mesma amostra)
+# antes desta conversão para CPM, os dados foram normalizados usando o 'Trimmed Mean of M caling' que serve para corrigir diferenças sistemáticas na composição das bibliotecas de RNA entre amostras (não é uma normalização dos dados em si, mas sim do tamanho da biblioteca)
+# esta normalização TMM já ajuda a reduzir a variabilidade técnica entre amostras, mas os dados ainda podem ter uma distribuição não normal por isso podemos aplicar uma transformação logaritmica
+
+## ver se há outliers
+## aplicar filtros de flat pattern para retirar genes com baixa expressão e variabilidade não significativa
+## logaritmização
+
+
+verificar_zero_frequente <- function(RNA_cpm) {
+  # Inicializa um vetor para armazenar os nomes dos genes com expressão zero frequente
+  genes_zero_frequente <- character(0)
+  total_amostras <- ncol(RNA_cpm) - 1 
+  # Itera sobre as linhas do dataframe
+  for (i in 1:nrow(RNA_cpm)) {
+    # Calcula a proporção de valores zero na linha atual
+    proporcao_zero <- sum(RNA_cpm[i, -1] == 0) / total_amostras
+    # Se a proporção de valores zero for maior que 90%, adiciona o nome do gene à lista
+    if (proporcao_zero > 0.9) {
+      genes_zero_frequente <- c(genes_zero_frequente, RNA_cpm[i, 1])
+    }
+  }
+  # Retorna os nomes dos genes com expressão zero frequente
+  return(genes_zero_frequente)
 }
 
-sum(is.na(rna_rpkm_zscore))
-# Já não existem NA no nosso dataset
+verificar_zero_frequente(RNA_cpm)  # não temos dados que tenham contagens com mais de 90% de 0
+
+## supostamente o edgeR faz o TMM por isso teoricamente poderiamos utilizar esse?
+
 
 
 ############### Metadados #########################
@@ -91,4 +130,69 @@ sum(is.na(rna_rpkm_zscore))
 #eu acho que é preciso ver se há NAs porém não os devemos substituir ou eliminar porque maior parte deles são caracteristicas das amostras logo não faz sentido eliminarou substituir pela média
 # quanto ao juntar os datasets estive a ver trabalhos de outros anos e eles criam subsets dos metadados que têm as amostras presentes nos dados
 #provavelmente é isto que temos de fazer
+
+#Verificar a classe do metadado:
+class(data_patient) # É um data frame, como queremos.
+dim(data_patient)
+unlist(lapply(data_patient,class))
+row.names(data_patient)
+row.names(data_patient) = data_patient$PATIENT_ID
+row.names(data_patient)
+sum(is.na(data_patient)) # há NA mas é normal em metadados e não iremos fazer nada
+View(data_patient)
+
+
+#Data_sample:
+class(data_sample) # Há vários formatos, um deles é de dataframe, como queremos
+sample_data = as.data.frame(data_sample) #Se quiser estabelecer em um formato só.
+class(sample_data)
+str(sample_data)
+colnames(sample_data) # para facilitar a nossa análise vamos pôr o nome das colunas a corresponder ao nome que está nos outros datasets
+colnames(sample_data) = sample_data[4,]
+colnames(sample_data)
+sample_data = sample_data[-c(1:4),] # Retirando as duas primeiras inhas que são apenas explicações da variável 
+dim(sample_data) # aproximadamente 73 variáveis e 672 amostras como esperado
+
+row.names(sample_data)  # as linhas não estão associadas a nada, como isto se trata de metadados referentes às amostras vamos associar cada linha ao ID de uma amostra (já que tambem são as amostras que estão nos nossos dados)
+row.names(sample_data) = sample_data$SAMPLE_ID
+row.names(sample_data)  # ainda é necessário certificarmo-nos que o ID da amostra corresponde ao ID que estã nos dados de RNA seq por isso vamos transformar o '-' em '.' e retirar o 'aml_oshu_2018_'
+row.names(sample_data) = gsub("-", ".", str_sub(row.names(sample_data), 15, 22)) 
+row.names(sample_data)
+
+
+# Os dados estão em relação as amostras, então o ID dos pacientes podem aparecer duplicados
+any(duplicated(sample_data$PATIENT_ID)) #Id de paciente duplicados, mas é normal dado que do mesmo paciente foram tiradas mais do que uma amostra
+# Não é suposto ter ID de amostra duplicado
+any(duplicated(sample_data$SAMPLE_ID)) #confirmado que não há
+
+###### Dados sobre mutações nos genes que serão usados posteriormente à análise da expressão diferencial ####
+class(data_mutations) # É um data frame
+dim(data_mutations)
+unlist(lapply(data_mutations,class))
+row.names(data_mutations)
+row.names(data_mutations) = data_mutations$Hugo_Symbol
+sum(is.na(data_mutations))
+# não faço ideia do que fazer comisto, só sei que provavelmente vamos precisar mais à frente para correlações e afins
+# do género: vemos que genes é que estão diferencialmente expressos e depois quantos desses estão associados a mutações descritas neste dataset
+
+
+
+#Nem todas as amostras foram utilizadas para o processo de análise de RNAseq
+# Há duas variáveis nos metadados: RNA sequenced e RNA seq analysis
+# Através da tabela de dados de RNA-seq sabemos que 451 amostras foram analisadas
+table(sample_data$RNA_SEQ_ANALYSIS) #corresponde ao esperado por isso vamos criar um subset de metadados apenas com estas amostras para facilitar análises posteriores
+sample_data_rna = sample_data[sample_data$RNA_SEQ_ANALYSIS == 'Yes',]
+dim(sample_data_rna) # ficámos com 451 linhas, ou seja, metadados relativos a 451 amostras cujo RNA foi sequenciado e analisado
+sum(row.names(sample_data_rna) %in% colnames(RNA_cpm)) # filtragem bem sucedida pois temos 451 correspondências
+
+#fazer a mesma filtragem (criação do subset) para os metadados dos pacientes
+patient_data_rna = data_patient %>% filter(data_patient$PATIENT_ID %in% sample_data_rna$PATIENT_ID)
+
+#para análises posterior vamos querer ver se há alguma assoicação entre mutações nos genes e a sua expressão daí fazermos a filtragem 
+mutations_subset = data_mutations %>% filter(data_mutations$Hugo_Symbol %in% RNA_cpm$Hugo_Symbol)
+# Agora os datasets com que vamos trabalhar são 'RNA_cpm' (dados de expressão génica), 'patient_data_rna' e 'sample_data_rna' (os dois metadados referentes às amostras cujo RNA foi analisado) e 'mutation_subset' (dados que serão usados para análises posteriores)
+
+##  ACHO QUE PODEMOS PASSAR À ANÁLISE EXPLORATÓRIA DOS DADOS ##
+# aqui acho que temos que selecionar os fatores que queremos estudar e fazer as.factor
+# diria para escolher sexo, treatment_type, group, sample_site, age_at_diagnosis 
 
