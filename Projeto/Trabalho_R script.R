@@ -38,7 +38,7 @@ download.file(data_sample_url, destfile ="data_sample.txt")
 download.file(data_mutations_url, destfile="data_mutations.txt")
 
 # Leitura do ficheiro 
-RNA_cpm = read.table("RNA_seq_cpm.txt", header = T, sep = '\t')
+RNA_cpm = read.table("data_mrna_seq.txt", header = T, sep = '\t')
 data_patient = read.table("data_patient.txt", header = T, sep = '\t')
 data_sample = read_tsv("data_sample.txt", na = "")
 data_mutations = read.table("data_mutations.txt", header = T, sep = '\t')
@@ -59,11 +59,8 @@ dim(RNA_cpm)
 
 ## Verificar se o nome das linhas está associado aos genes e as colunas às amostras ##
 colnames(RNA_cpm)  #já sabiamos isto devido ao termos verificado a class de cada coluna
-# estes nomes são muito longos e dificeis de perceber por isso podemos encolhê-los para só terem informação relevante para a identificação da amostra
-#retirando o 'aml_oshu_2018_' que está presente no inicio do nome de todas as amostras e apenas se refere ao paper associado a este dataset
-colnames(RNA_cpm)[-c(1, 2)] = str_sub(colnames(RNA_cpm)[-c(1, 2)], 15, 22)  #aqui ignoramos as duas primeiras colunas e mudamos o nome das outras
+#os nomes das amostras parecem bons
 # vamos que ter cuidado porque nos metadados o nome das amostras não é exatamente igual a este por isso teremos que mudar para corresponder
-colnames(RNA_cpm)
 
 head(rownames(RNA_cpm)) #como esperado o nome dos genes não está associado ao nome das linhas porque não o conseguimos fazer aquando da função read.table()
 # há nomes duplicados por isso temos que encontrar os que estão duplicados e adicionar um '_duplicado' para sabermos que o são e conseguirmos associar o nome dos genes às linhas
@@ -95,11 +92,8 @@ any(is.na(RNA_cpm))
 # antes desta conversão para CPM, os dados foram normalizados usando o 'Trimmed Mean of M caling' que serve para corrigir diferenças sistemáticas na composição das bibliotecas de RNA entre amostras (não é uma normalização dos dados em si, mas sim do tamanho da biblioteca)
 # esta normalização TMM já ajuda a reduzir a variabilidade técnica entre amostras, mas os dados ainda podem ter uma distribuição não normal por isso podemos aplicar uma transformação logaritmica
 
-## ver se há outliers
+## ver se há outliers ??
 ## aplicar filtros de flat pattern para retirar genes com baixa expressão e variabilidade não significativa
-## logaritmização
-
-
 verificar_zero_frequente <- function(RNA_cpm) {
   # Inicializa um vetor para armazenar os nomes dos genes com expressão zero frequente
   genes_zero_frequente <- character(0)
@@ -119,69 +113,61 @@ verificar_zero_frequente <- function(RNA_cpm) {
 
 verificar_zero_frequente(RNA_cpm)  # não temos dados que tenham contagens com mais de 90% de 0
 
-## supostamente o edgeR faz o TMM por isso teoricamente poderiamos utilizar esse?
-
-
+## supostamente o edgeR faz o TMM por isso teoricamente poderiamos utilizar esse package para a DE?
 
 ############### Metadados #########################
-# falta fazer esta verificação inicial; ver se são dataframe (aquele que não é, precisamos de transformar em dataframe)
-#ver se o nº de linhas corrresponde ao nº de amostras descritas
-#ver se o nome das variaveis e amostras esão associados às colunas e linhas, respetivamente
-#eu acho que é preciso ver se há NAs porém não os devemos substituir ou eliminar porque maior parte deles são caracteristicas das amostras logo não faz sentido eliminarou substituir pela média
-# quanto ao juntar os datasets estive a ver trabalhos de outros anos e eles criam subsets dos metadados que têm as amostras presentes nos dados
-#provavelmente é isto que temos de fazer
-
 #Verificar a classe do metadado:
 class(data_patient) # É um data frame, como queremos.
 dim(data_patient)
 unlist(lapply(data_patient,class))
+data_patient[, -1] <- lapply(data_patient[, -1], as.factor) # não sei se é correto aplicar a todas as colunas
 row.names(data_patient)
 row.names(data_patient) = data_patient$PATIENT_ID
 row.names(data_patient)
 sum(is.na(data_patient)) # há NA mas é normal em metadados e não iremos fazer nada
-View(data_patient)
-
 
 #Data_sample:
 class(data_sample) # Há vários formatos, um deles é de dataframe, como queremos
-sample_data = as.data.frame(data_sample) #Se quiser estabelecer em um formato só.
-class(sample_data)
-str(sample_data)
-colnames(sample_data) # para facilitar a nossa análise vamos pôr o nome das colunas a corresponder ao nome que está nos outros datasets
-colnames(sample_data) = sample_data[4,]
-colnames(sample_data)
-sample_data = sample_data[-c(1:4),] # Retirando as duas primeiras inhas que são apenas explicações da variável 
-dim(sample_data) # aproximadamente 73 variáveis e 672 amostras como esperado
+data_sample = as.data.frame(data_sample) #Se quiser estabelecer em um formato só.
+class(data_sample)
+str(data_sample)
+data_sample[, -c(1, 2)] <- lapply(data_sample[, -c(1, 2)], as.factor)  #não sei se isto é o mais correto
+# talvez aqui seja melhor descrever todas as váriaveis (colunas) e já identificar quais pomos como fatores e que ireos usar a seguir
+str(data_sample)
 
-row.names(sample_data)  # as linhas não estão associadas a nada, como isto se trata de metadados referentes às amostras vamos associar cada linha ao ID de uma amostra (já que tambem são as amostras que estão nos nossos dados)
-row.names(sample_data) = sample_data$SAMPLE_ID
-row.names(sample_data)  # ainda é necessário certificarmo-nos que o ID da amostra corresponde ao ID que estã nos dados de RNA seq por isso vamos transformar o '-' em '.' e retirar o 'aml_oshu_2018_'
-row.names(sample_data) = gsub("-", ".", str_sub(row.names(sample_data), 15, 22)) 
-row.names(sample_data)
+colnames(data_sample) # para facilitar a nossa análise vamos pôr o nome das colunas a corresponder ao nome que está nos outros datasets
+colnames(data_sample) = data_sample[4,]
+colnames(data_sample)
+data_sample = data_sample[-c(1:4),] # Retirando as duas primeiras linhas que são apenas explicações da variável 
+dim(data_sample) # aproximadamente 73 variáveis e 672 amostras como esperado
 
+row.names(data_sample)  # as linhas não estão associadas a nada, como isto se trata de metadados referentes às amostras vamos associar cada linha ao ID de uma amostra (já que tambem são as amostras que estão nos nossos dados)
+row.names(data_sample) = data_sample$SAMPLE_ID
+row.names(data_sample)  # ainda é necessário certificarmo-nos que o ID da amostra corresponde ao ID que estã nos dados de RNA seq por isso vamos transformar o '-' em '.'
+row.names(data_sample) = gsub("-", ".", row.names(data_sample)) 
+row.names(data_sample)
 
 # Os dados estão em relação as amostras, então o ID dos pacientes podem aparecer duplicados
-any(duplicated(sample_data$PATIENT_ID)) #Id de paciente duplicados, mas é normal dado que do mesmo paciente foram tiradas mais do que uma amostra
+any(duplicated(data_sample$PATIENT_ID)) #Id de paciente duplicados, mas é normal dado que do mesmo paciente foram tiradas mais do que uma amostra
 # Não é suposto ter ID de amostra duplicado
-any(duplicated(sample_data$SAMPLE_ID)) #confirmado que não há
+any(duplicated(data_sample$SAMPLE_ID)) #confirmado que não há
 
 ###### Dados sobre mutações nos genes que serão usados posteriormente à análise da expressão diferencial ####
 class(data_mutations) # É um data frame
 dim(data_mutations)
 unlist(lapply(data_mutations,class))
 row.names(data_mutations)
-row.names(data_mutations) = data_mutations$Hugo_Symbol
+row.names(data_mutations) = data_mutations$Hugo_Symbol  # não dá para fazer porque temos genes com o mesmo nome, mas aqui não podemos por 'duplicado' no final então vamos deixar assim
 sum(is.na(data_mutations))
-# não faço ideia do que fazer comisto, só sei que provavelmente vamos precisar mais à frente para correlações e afins
+# não faço ideia do que fazer com isto, só sei que provavelmente vamos precisar mais à frente para correlações e afins
 # do género: vemos que genes é que estão diferencialmente expressos e depois quantos desses estão associados a mutações descritas neste dataset
-
 
 
 #Nem todas as amostras foram utilizadas para o processo de análise de RNAseq
 # Há duas variáveis nos metadados: RNA sequenced e RNA seq analysis
 # Através da tabela de dados de RNA-seq sabemos que 451 amostras foram analisadas
-table(sample_data$RNA_SEQ_ANALYSIS) #corresponde ao esperado por isso vamos criar um subset de metadados apenas com estas amostras para facilitar análises posteriores
-sample_data_rna = sample_data[sample_data$RNA_SEQ_ANALYSIS == 'Yes',]
+table(data_sample$RNA_SEQ_ANALYSIS) #corresponde ao esperado por isso vamos criar um subset de metadados apenas com estas amostras para facilitar análises posteriores
+sample_data_rna = data_sample[data_sample$RNA_SEQ_ANALYSIS == 'Yes',]
 dim(sample_data_rna) # ficámos com 451 linhas, ou seja, metadados relativos a 451 amostras cujo RNA foi sequenciado e analisado
 sum(row.names(sample_data_rna) %in% colnames(RNA_cpm)) # filtragem bem sucedida pois temos 451 correspondências
 
@@ -190,7 +176,17 @@ patient_data_rna = data_patient %>% filter(data_patient$PATIENT_ID %in% sample_d
 
 #para análises posterior vamos querer ver se há alguma assoicação entre mutações nos genes e a sua expressão daí fazermos a filtragem 
 mutations_subset = data_mutations %>% filter(data_mutations$Hugo_Symbol %in% RNA_cpm$Hugo_Symbol)
-# Agora os datasets com que vamos trabalhar são 'RNA_cpm' (dados de expressão génica), 'patient_data_rna' e 'sample_data_rna' (os dois metadados referentes às amostras cujo RNA foi analisado) e 'mutation_subset' (dados que serão usados para análises posteriores)
+
+## Filtrar para ficarmos apenas com os metadados que nos interessam para posterior análise
+# aqui acho que temos que selecionar os fatores que queremos estudar 
+# diria para escolher sexo, treatment_type, group, sample_site, age_at_diagnosis
+
+variaveis_patient = c('PATIENT_ID', 'SEX', 'AGE_AT_DIAGNOSIS', 'PRIOR_CANCER', 'TREATMENT_TYPE')
+variaveis_sample = c('PATIENT_ID', 'SAMPLE_ID', 'GROUP', 'SAMPLE_SITE')
+subset_patient <- patient_data_rna[, variaveis_patient]
+subset_sample <- sample_data_rna[, variaveis_sample]
+
+# Agora os datasets com que vamos trabalhar são 'RNA_cpm' (dados de expressão génica), 'subset_patient' e 'subset_sample' (os dois metadados referentes às amostras cujo RNA foi analisado) e 'mutation_subset' (dados que serão usados para análises posteriores)
 
 ##  ACHO QUE PODEMOS PASSAR À ANÁLISE EXPLORATÓRIA DOS DADOS ##
 # aqui acho que temos que selecionar os fatores que queremos estudar e fazer as.factor
