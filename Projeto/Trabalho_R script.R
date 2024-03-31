@@ -120,32 +120,49 @@ verificar_zero_frequente(RNA_cpm)  # não temos dados que tenham contagens com m
 class(data_patient) # É um data frame, como queremos.
 dim(data_patient)
 unlist(lapply(data_patient,class))
-data_patient[, -1] <- lapply(data_patient[, -1], as.factor) # não sei se é correto aplicar a todas as colunas
+str(data_patient)
 row.names(data_patient)
-row.names(data_patient) = data_patient$PATIENT_ID
+row.names(data_patient) <- data_patient$PATIENT_ID
 row.names(data_patient)
+data_patient <- data_patient[,-1]
+
+#Não sei se era apropriado, fiz de outra forma
+#data_patient[, -1] <- lapply(data_patient[, -1], as.factor) # não sei se é correto aplicar a todas as colunas
+# Decidi não selecionar nada, acho que talvez selelcionar a medida que analisamos:
+## Transformação das variáveis:
+str(data_patient)
+data_patient[, c(1,2,4,5,7, 8, 9, 10, 11, 12, 13, 14, 18, 20, 21)] <- lapply(data_patient[, c(1,2,4,5,7, 8, 9, 10, 11, 12, 13, 14, 18, 20, 21)], as.factor)
+
 sum(is.na(data_patient)) # há NA mas é normal em metadados e não iremos fazer nada
+str(data_patient)
 
 #Data_sample:
 class(data_sample) # Há vários formatos, um deles é de dataframe, como queremos
 data_sample = as.data.frame(data_sample) #Se quiser estabelecer em um formato só.
 class(data_sample)
 str(data_sample)
-data_sample[, -c(1, 2)] <- lapply(data_sample[, -c(1, 2)], as.factor)  #não sei se isto é o mais correto
-# talvez aqui seja melhor descrever todas as váriaveis (colunas) e já identificar quais pomos como fatores e que ireos usar a seguir
-str(data_sample)
 
 colnames(data_sample) # para facilitar a nossa análise vamos pôr o nome das colunas a corresponder ao nome que está nos outros datasets
 colnames(data_sample) = data_sample[4,]
 colnames(data_sample)
-data_sample = data_sample[-c(1:4),] # Retirando as duas primeiras linhas que são apenas explicações da variável 
+data_sample = data_sample[-c(1:4),] # Retirando as duas primeiras linhas que são apenas explicações das variáveis 
 dim(data_sample) # aproximadamente 73 variáveis e 672 amostras como esperado
 
 row.names(data_sample)  # as linhas não estão associadas a nada, como isto se trata de metadados referentes às amostras vamos associar cada linha ao ID de uma amostra (já que tambem são as amostras que estão nos nossos dados)
 row.names(data_sample) = data_sample$SAMPLE_ID
-row.names(data_sample)  # ainda é necessário certificarmo-nos que o ID da amostra corresponde ao ID que estã nos dados de RNA seq por isso vamos transformar o '-' em '.'
+row.names(data_sample)  # ainda é necessário certificarmo-nos que o ID da amostra corresponde ao ID que estão nos dados de RNA seq por isso vamos transformar o '-' em '.'
 row.names(data_sample) = gsub("-", ".", row.names(data_sample)) 
 row.names(data_sample)
+data_sample = data_sample[,-2]
+
+#data_sample[, -c(1, 2)] <- lapply(data_sample[, -c(1, 2)], as.factor)  #não sei se isto é o mais correto
+# talvez aqui seja melhor descrever todas as váriaveis (colunas) e já identificar quais pomos como fatores e que ireos usar a seguir
+str(data_sample)
+colunas_fator <- c(2, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 21, 23, 24, 26, 28, 34, 45, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 70, 72)
+data_sample[,colunas_fator] <- lapply(data_sample[,colunas_fator], as.factor)
+colunas_numericas <- c(25, 29, 30, 31, 32, 33, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 46, 47, 49, 50, 52, 54, 55, 69, 74)
+data_sample[,colunas_numericas] <- lapply(data_sample[,colunas_numericas], as.numeric)
+str(data_sample)
 
 # Os dados estão em relação as amostras, então o ID dos pacientes podem aparecer duplicados
 any(duplicated(data_sample$PATIENT_ID)) #Id de paciente duplicados, mas é normal dado que do mesmo paciente foram tiradas mais do que uma amostra
@@ -159,14 +176,21 @@ unlist(lapply(data_mutations,class))
 row.names(data_mutations)
 row.names(data_mutations) = data_mutations$Hugo_Symbol  # não dá para fazer porque temos genes com o mesmo nome, mas aqui não podemos por 'duplicado' no final então vamos deixar assim
 sum(is.na(data_mutations))
-# não faço ideia do que fazer com isto, só sei que provavelmente vamos precisar mais à frente para correlações e afins
-# do género: vemos que genes é que estão diferencialmente expressos e depois quantos desses estão associados a mutações descritas neste dataset
-
+## Preparação dos dados:
+str(data_mutations)
+colunas_fator <- c(1, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,29,30,31,32, 33, 45, 47, 48, 51, 57, 60, 64)
+colunas_numericas <- c(34,35,36,37,43, 54, 58, 63)
+colunas_char <- c(2,6,7)
+data_mutations[, colunas_fator]<- lapply(data_mutations[, colunas_fator], as.factor)
+data_mutations[, colunas_numericas]<- lapply(data_mutations[, colunas_numericas], as.numeric)
+data_mutations[, colunas_char]<- lapply(data_mutations[, colunas_char], as.character)
+str(data_mutations)
 
 #Nem todas as amostras foram utilizadas para o processo de análise de RNAseq
 # Há duas variáveis nos metadados: RNA sequenced e RNA seq analysis
 # Através da tabela de dados de RNA-seq sabemos que 451 amostras foram analisadas
 table(data_sample$RNA_SEQ_ANALYSIS) #corresponde ao esperado por isso vamos criar um subset de metadados apenas com estas amostras para facilitar análises posteriores
+pie(table(data_sample$RNA_SEQ_ANALYSIS), main = "RNA-Seq analysis?")
 sample_data_rna = data_sample[data_sample$RNA_SEQ_ANALYSIS == 'Yes',]
 dim(sample_data_rna) # ficámos com 451 linhas, ou seja, metadados relativos a 451 amostras cujo RNA foi sequenciado e analisado
 sum(row.names(sample_data_rna) %in% colnames(RNA_cpm)) # filtragem bem sucedida pois temos 451 correspondências
@@ -176,6 +200,74 @@ patient_data_rna = data_patient %>% filter(data_patient$PATIENT_ID %in% sample_d
 
 #para análises posterior vamos querer ver se há alguma assoicação entre mutações nos genes e a sua expressão daí fazermos a filtragem 
 mutations_subset = data_mutations %>% filter(data_mutations$Hugo_Symbol %in% RNA_cpm$Hugo_Symbol)
+
+############# Sumarização dos dados ##############
+library(summarytools)
+## data patient:
+print(dfSummary(data_patient, style = 'grid', graph.magnif = 1, valid.col = FALSE,
+                max.distinct.values = 5, col.widths = c(100, 200, 200, 350, 500, 250),
+                dfSummary.silent  = TRUE, headings = FALSE, justify = 'l')
+      , method = 'render', max.tbl.height = 500)
+
+# Considerando variáveis relevantes:
+colunas_relevantes = c("SEX", "ETHNICITY", "AGE_AT_DIAGNOSIS", "PRIOR_CANCER", "TREATMENT_TYPE", "OS_STATUS", "OS_MONTHS", "CAUSE_OF_DEATH_SOURCE", "DIAGNOSIS")
+relev_data_patient <- data_patient[,colunas_relevantes]
+boxplot(AGE_AT_DIAGNOSIS ~ OS_STATUS, data = relev_data_patient, main = "Idade do diagnostico vs status", xlab = "Status", ylab = "Idade em anos", col = c("blue", "green", "red"), names = c("NA", "0:LIVING", "1:DECEASED"))
+
+valores = table(relev_data_patient$ETHNICITY)
+nome = c("AdmixedAsian", "AdmixedBlack", "AdmixedWhite", "Asian", "Black", "HispNative", "White")
+
+pie(valores, labels = rep("", length(valores)), col = c("black",3,4,5,6,7,2), main = "Etinias") 
+legend("right", legend = nome, bty = "n", cex = 0.8, fill = c("black",3,4,5,6,7,2))
+
+boxplot(AGE_AT_DIAGNOSIS ~ SEX, data = relev_data_patient, main = "Idade do diagnostico vs gênero", xlab = "Gênero", ylab = "Idade em anos", col = c(2,5))
+
+d = table(relev_data_patient$DIAGNOSIS)
+d = as.data.frame(d)
+indice_maximo <- which.max(d$Freq)
+nome_maximo <- d$Var1[indice_maximo]
+nome_maximo #Diagnóstico mais recorrente
+
+## data_sample
+print(dfSummary(data_sample, style = 'grid', graph.magnif = 1, valid.col = FALSE,
+                max.distinct.values = 5, col.widths = c(100, 200, 200, 350, 500, 250),
+                dfSummary.silent  = TRUE, headings = FALSE, justify = 'l')
+      , method = 'render', max.tbl.height = 500)
+
+colunas_relevantes = c("PATIENT_ID", "GROUP", "SAMPLE_SITE", "PLATFORM", "PB_LYMPHOCYTES_PERCENTAGE", "PB_MONOCYTES_PERCENTAGE")
+relev_data_sample <- data_sample[,colunas_relevantes]
+pie(table(relev_data_sample$SAMPLE_SITE), main = "Local de recolha das amostras")
+
+x = table(relev_data_sample$GROUP)
+x = as.data.frame(x)
+indice_maximo <- which.max(x$Freq)
+nome_maximo <- x$Var1[indice_maximo]
+nome_maximo ## grupo do diagnóstico mais analisado.
+
+## Data_mutations
+print(dfSummary(data_mutations, style = 'grid', graph.magnif = 1, valid.col = FALSE,
+                max.distinct.values = 5, col.widths = c(100, 200, 200, 350, 500, 250),
+                dfSummary.silent  = TRUE, headings = FALSE, justify = 'l')
+      , method = 'render', max.tbl.height = 500)
+
+colunas_relevantes = c("Chromosome", "Start_Position", "End_Position", "Strand", "Variant_Classification", "Variant_Type", "Tumor_Seq_Allele1", "Tumor_Seq_Allele2", "Validation_Status", "Mutation_Status", "impact", "t_vaf", "tumor_only")
+relev_data_mutations = data_mutations[, colunas_relevantes]
+
+barplot(table(relev_data_mutations$Chromosome), main = "Cromossomos", col = "4")
+
+pie(table(relev_data_mutation$Variant_Type), main = "Tipo de variação")
+
+mut = table(relev_data_mutations$Tumor_Seq_Allele1)
+mut = as.data.frame(mut)
+indice_maximo <- which.max(mut$Freq)
+nome_maximo <- mut$Var1[indice_maximo]
+nome_maximo # A mutação mais comun é a alteração por C
+
+mut2 = table(relev_data_mutations$Tumor_Seq_Allele2)
+mut2 = as.data.frame(mut2)
+indice_maximo <- which.max(mut2$Freq)
+nome_maximo <- mut2$Var1[indice_maximo]
+nome_maximo # A mutação mais comum é a alteração por T
 
 ## Filtrar para ficarmos apenas com os metadados que nos interessam para posterior análise
 # aqui acho que temos que selecionar os fatores que queremos estudar 
@@ -191,4 +283,8 @@ subset_sample <- sample_data_rna[, variaveis_sample]
 ##  ACHO QUE PODEMOS PASSAR À ANÁLISE EXPLORATÓRIA DOS DADOS ##
 # aqui acho que temos que selecionar os fatores que queremos estudar e fazer as.factor
 # diria para escolher sexo, treatment_type, group, sample_site, age_at_diagnosis 
+
+
+
+
 
