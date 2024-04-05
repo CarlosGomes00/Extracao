@@ -1,0 +1,404 @@
+---
+title: "Trabalho Prático de Extração de Conhecimento de Dados Biológicos"
+date: "`r Sys.Date()`"
+author: "Carlos Gomes (PG51681), Laís Carvalho (PG52536), Rita Nóbrega (PG46733)"
+output: 
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    theme: spacelab
+    number_sections: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+---
+
+```{=html}
+<style>
+  body {text-align:justify}
+</style>
+```
+
+------------------------------------------------------------------------
+
+# Contextualização
+
+O conjunto de dados selecionados para este trabalho foram retirados de um estudo cohort com 672 amostras recolhidas através de biopsias a 562 pacientes com Leucemia Mielóide Aguda (LMA)[^1]. Com o objetivo de correlacionar a sensibilidade e resistência de grupos de pacientes com LMA a tratamentos já existentes com a ocorrência de mutações, foram realizadas anotações clínicas detalhadas, estudos genómicos e transcriptómicos (com a sequenciação do exoma (622 amostras) e do RNA (451 amostras)), assim como testes *ex vivo* de sensibilidade a compostos. Os dados e estudo original podem ser consultados através do Genomic Data Commons (GDC)[^2].
+
+[^1]: (Tyner *et al*., 2018)
+
+[^2]: <https://www.cbioportal.org/study/summary?id=aml_ohsu_2018>
+
+Este trabalho tem como objetivo analisar os dados de expressão de pacientes com AML, comparando os seus dados transcriptómicos com amostras controlo (saudáveis), com vista a obter informações sobre genes diferencialmente expressos e enriquecidos, clusters de genes e/ou de amostras e que genes parecem ter maior importância no transcriptoma associado a AML.
+
+Para começar com a análise, primeiro procedemos à **instalação** de algumas bibliotecas!
+
+```{r Instalação dos packages}
+# install.packages("tidyverse")
+
+## install.packages("arules")
+
+## install.packages("data.table")
+
+# install.packages("summarytools")
+
+# install.packages("ggpubr")
+
+## if (!requireNamespace("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+# BiocManager::install("limma")
+
+## if (!requireNamespace("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+# BiocManager::install("Glimma")
+
+## if (!requireNamespace("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+# BiocManager::install("edgeR")
+
+## if (!requireNamespace("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+# BiocManager::install("org.Hs.eg.db")
+
+## if (!requireNamespace("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+# BiocManager::install("GO.db")
+
+# install.packages("car")
+
+# install.packages("caret")
+
+## install.packages("RColorBrewer")
+
+## install.packages("gplots")
+
+# install.packages("FactoMineR")
+
+## install.packages("factoextra")
+
+# install.packages("readr")
+```
+
+Depois da sua instalação, fizemos o seu **carregamento**!
+
+```{r Import dos packages}
+# library(tidyverse)
+# library(arules)
+# library(data.table)
+# library(summarytools)
+# library(ggpubr)
+# library(limma)
+# library(Glimma)
+# library(edgeR)
+# library(org.Hs.eg.db)
+# library(GO.db)
+# library(car)
+# library(caret)
+# library(RColorBrewer)
+# library(gplots)
+# library(FactoMineR)
+# library(factoextra)
+ library(readr)
+# library(readxl)
+# library(tibble)
+# library(genefilter)
+# library(dplyr)
+# library(gplots)
+# library(stringr)
+# library(sparseMatrixStats)
+# library(DelayedMatrixStats)
+```
+
+# Datasets
+
+## Transferência e leitura dos datastes
+
+Depois de importar as bibliotecas necessárias, começamos por **associar** os datasets presentes no repositório online [^3] a uma **variável**.
+
+[^3]: <https://github.com/lais-carvalho/Trabalho-pratico/tree/main/Dados>
+
+```{r Associação dos datasets a uma variável}
+
+RNA_cpm_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_mrna_seq_cpm.txt"
+
+data_patient_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_clinical_patient.txt"
+
+data_sample_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_clinical_sample.txt"
+
+data_mutations_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_mutations.txt"
+
+```
+
+De seguida, faz-se o **download** dos datasets e guardamos uma cópia local.
+
+```{r Download dos Datasets}
+
+download.file(RNA_cpm_url, destfile="RNA_seq_cpm.txt")
+
+download.file(data_patient_url, destfile="data_patient.txt") 
+
+download.file(data_sample_url, destfile ="data_sample.txt")
+
+download.file(data_mutations_url, destfile="data_mutations.txt")
+
+```
+
+E por fim a **leitura** desses ficheiros.
+
+```{r Leitura dos ficheiros}
+
+RNA_cpm = read.table("data_mrna_seq.txt", header = T, sep = '\t')
+
+data_patient = read.table("data_patient.txt", header = T, sep = '\t')
+
+data_sample = read_tsv("data_sample.txt", na = "")
+
+data_mutations = read.table("data_mutations.txt", header = T, sep = '\t')
+
+```
+
+## Pré-processamento dos dados {.tabset}
+
+### RNA_cpm
+
+O nosso dataset consiste em valores CPM (counts per million), uma medida usada para normalizar a expressão génica e facilitar a comparação entre amostras com nº total de reads diferentes.Então, quanto maior for o CPM, maior o na expressão de determinado gene numa determinada amostra (relativamente a outros genes na mesma amostra)
+
+Antes desta conversão para CPM, os dados foram normalizados usando o 'Trimmed Mean of M caling' que serve para corrigir diferenças sistemáticas na composição das bibliotecas de RNA entre amostras (não é uma normalização dos dados em si, mas sim do tamanho da biblioteca). Esta normalização TMM já ajuda a reduzir a variabilidade técnica entre amostras.
+
+Começámos por verificar alguns aspetos relativamente ao dataset.
+
+```{r Verificar a estrutura dos dados}
+
+class(RNA_cpm)
+
+unlist(lapply(RNA_cpm,class)) 
+
+dim(RNA_cpm)
+
+colnames(RNA_cpm)
+
+head(rownames(RNA_cpm))
+
+```
+
+Com o código acima é possível perceber:
+
+-   **class(RNA_cpm)** -\> Classe do dataset, dataframe neste caso;
+
+-   **unlist(lapply(RNA_cpm,class))** -\> Classe de cada coluna do dataframe
+
+-   **dim(RNA_cpm)** -\> Dimensão do dataframe;
+
+-   **colnames(RNA_cpm)** e **head(rownames(RNA_cpm))** -\> Verificar se o nome dos genes se está associado às linhas, e o nome das amostras às colunas.
+
+Através do código utilizado em cima, verificamos que o dataset é um **dataframe** com uma dimensão de 22843 linhas e 453 colunas. As linhas estão representadas como genes enquanto que as colunas representam as amostras, no entanto uma das colunas serve como ID, o que corresponde a **22843 genes** e **452 amostras**. Além disso, foi possível verificar também que as linhas não estão associadas aos genes.
+
+Percebemos também que existem genes duplicados.
+
+```{r Remover duplicados}
+
+which(duplicated(RNA_cpm[,1]))
+
+RNA_cpm[which(duplicated(RNA_cpm[,1])),1]
+
+which(RNA_cpm == 'BTBD8', arr.ind = T)
+
+RNA_cpm[which(duplicated(RNA_cpm[,1])),1] = paste(RNA_cpm[which(duplicated(RNA_cpm[,1])),1], "_duplicado", sep = "")
+
+which(duplicated(RNA_cpm[,1]))
+      
+RNA_cpm[13532, 1]
+
+```
+
+O código utilizado serviu para:
+
+-   **(which(duplicated(RNA_cpm[,1])))** -\> Saber quantos genes têm o nome repetido;
+
+-   **RNA_cpm[which(duplicated(RNA_cpm[,1])),1]** -\> Obter o nome dos genes duplicados;
+
+-   **which(RNA_cpm == 'BTBD8', arr.ind = T)** -\> Confirmar se o nome está duplicado;
+
+Nesta fase, e através de verificação manual, percebemos que o nome é de facto igual, no entanto os z-scores são diferentes.
+
+Optamos então por adicionar "\_duplicado" para os distinguir.
+
+-   **RNA_cpm[which(duplicated(RNA_cpm[,1])),1] = paste(RNA_cpm[which(duplicated(RNA_cpm[,1])),1], "_duplicado", sep = "")** -\> Adiciona o "duplicado";
+
+-   **which(duplicated(RNA_cpm[,1]))** -\> Retorna as posições das linhas duplicadas da primeira coluna;
+
+-   **RNA_cpm[13532, 1]** -\> Retorna o valor na linha 13532 e coluna 1.
+
+Assim, já é possível associar o nome dos genes às linhas, corretamente:
+
+```{r Associar os nomes}
+
+rownames(RNA_cpm) = RNA_cpm[, 1]
+
+rownames(RNA_cpm)
+
+```
+
+-   **rownames(RNA_cpm) = RNA_cpm[, 1]** -\> Transformar os valores da primeira coluna, no nome das linhas;
+
+-   **rownames(RNA_cpm)** -\> Verificar se não ocorreu nenhum erro no comando anterior;
+
+De seguida, continuamos com o pré-processamento dos dados, verificando se existem valores omissos.
+
+```{r Valores Omissos}
+any(is.na(RNA_cpm))
+
+RNA_cpm$Entrez_Gene_Id <- NULL
+
+any(is.na(RNA_cpm))
+
+```
+
+-   **any(is.na(RNA_cpm))** -\> Ver se há missing values
+
+-   **RNA_cpm\$Entrez_Gene_Id \<- NULL** -\> Eliminar a coluna com missing values
+
+-   **any(is.na(RNA_cpm))** -\> Verificar outra vez se há missing values
+
+Os valores omissos que existiam no dataframe estavam todos presentes na mesma coluna, por isso depois da sua eliminação, já não existem NAs.
+
+Por último, decidimos verificar se existem genes com uma frequência de expressão zero, acima de 90% das amostras:
+
+```{r Retirar genes com expressão 0 frequente}
+
+verificar_zero_frequente <- function(RNA_cpm) {
+  genes_zero_frequente <- character(0)
+  total_amostras <- ncol(RNA_cpm) - 1 
+  for (i in 1:nrow(RNA_cpm)) {
+    proporcao_zero <- sum(RNA_cpm[i, -1] == 0) / total_amostras
+    if (proporcao_zero > 0.9) {
+      genes_zero_frequente <- c(genes_zero_frequente, RNA_cpm[i, 1])
+    }
+  }
+  return(genes_zero_frequente)
+}
+
+# verificar_zero_frequente(RNA_cpm)
+
+```
+
+-   **verificar_zero_frequente \<- function(RNA_cpm) {...}** -\> Definir uma função;
+
+-   **genes_zero_frequente \<- character(0)** -\> Inicia um vetor vazio para armazenar o nome dos genes;
+
+-   **total_amostras \<- ncol(RNA_cpm) - 1** -\> Calcula o número total de amostras, com exceção da primeira coluna que corresponde ao nome dos genes;
+
+-   **for (i in 1:nrow(RNA_cpm))** -\> Inicia um loop sobre cada linha;
+
+-   **proporcao_zero \<- sum(RNA_cpm[i, -1] == 0) / total_amostras** -\> Calcula a proporção de valores 0 em cada linha, excluindo a primeira coluna;
+
+-   **if (proporcao_zero \> 0.9)** -\> Verifica se a proporção dos valores é maior que 90%
+
+-   **genes_zero_frequente \<- c(genes_zero_frequente, RNA_cpm[i, 1])** -\> Caso a condição anterior seja verdadeira, o nome do gene é adicionado ao vetor;
+
+-   **return(genes_zero_frequente)** -\> Retorna o vetor contendo o nome dos genes com expressão 0 maior que 90%.
+
+### Metadados {.tabset}
+
+#### data_patient
+
+Começámos por verificar alguns aspetos relativos ao dataset:
+
+```{r Classes dos metadados}
+
+class(data_patient)
+
+dim(data_patient)
+
+unlist(lapply(data_patient,class))
+
+str(data_patient)
+
+row.names(data_patient)
+
+row.names(data_patient) <- data_patient$PATIENT_ID
+
+row.names(data_patient)
+
+data_patient <- data_patient[,-1]
+
+```
+
+O dataset é um dataframe com 562 linhas...
+
+```{r Transformação das Variáveis}
+
+str(data_patient)
+data_patient[, c(1,2,4,5,7, 8, 9, 10, 11, 12, 13, 14, 18, 20, 21)] <- lapply(data_patient[, c(1,2,4,5,7, 8, 9, 10, 11, 12, 13, 14, 18, 20, 21)], as.factor)
+
+```
+
+Depois vamos ver se exitem NAs.
+
+```{r Verificação de NAs}
+
+sum(is.na(data_patient)) # há NA mas é normal em metadados e não iremos fazer nada
+
+```
+
+Existem NAs, mas em metadados é normal e por isso iremos mantê-los por agora.
+
+#### data_sample
+
+Começámos por verificar alguns aspetos relativos ao dataset:
+
+```{r}
+class(data_sample) # Há vários formatos, um deles é de dataframe, como queremos
+
+data_sample = as.data.frame(data_sample) #Se quiser estabelecer em um formato só.
+
+class(data_sample)
+
+str(data_sample)
+
+```
+
+Havia vários formatos neste dataset, então decidimos estabelecer tudo como dataframe!
+
+De seguida, para facilitar a nossa análise, colocamos o nome das colunas a corresponder aos outros datasets:
+
+```{r}
+
+colnames(data_sample)
+
+colnames(data_sample) = data_sample[4,]
+
+colnames(data_sample)
+
+
+```
+
+Agora, já podemos ver a dimensão do dataframe:
+
+```{r}
+
+dim(data_sample)
+
+```
+O dataframe possui 676 linhas, correspondentes a amostras e 75 colunas correspondentes a variáveis.
+
+As linhas não estão associadas a nada, então, foi necessário associar cada linha ao ID de uma amostra:
+
+```{r}
+
+row.names(data_sample) = data_sample$SAMPLE_ID
+
+row.names(data_sample)  
+
+row.names(data_sample) = gsub("-", ".", row.names(data_sample)) 
+
+row.names(data_sample)
+
+data_sample = data_sample[,-2]
+
+```
+
+Para além de fazermos a associação, removemos ainda a segunda coluna do dataframe.
+
+
