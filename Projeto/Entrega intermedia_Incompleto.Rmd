@@ -1,5 +1,5 @@
 ---
-title: "Trabalho Prático de Extração de Conhecimento de Dados Biológicos"
+title: "**Trabalho Prático de Extração de Conhecimento de Dados Biológicos**"
 date: "`r Sys.Date()`"
 author: "Carlos Gomes (PG51681), Laís Carvalho (PG52536), Rita Nóbrega (PG46733)"
 output: 
@@ -22,7 +22,7 @@ output:
 
 ------------------------------------------------------------------------
 
-# Contextualização
+# **Contextualização**
 
 O conjunto de dados selecionados para este trabalho foram retirados de um estudo cohort com 672 amostras recolhidas através de biopsias a 562 pacientes com Leucemia Mielóide Aguda (LMA)[^1]. Com o objetivo de correlacionar a sensibilidade e resistência de grupos de pacientes com LMA a tratamentos já existentes com a ocorrência de mutações, foram realizadas anotações clínicas detalhadas, estudos genómicos e transcriptómicos (com a sequenciação do exoma (622 amostras) e do RNA (451 amostras)), assim como testes *ex vivo* de sensibilidade a compostos. Os dados e estudo original podem ser consultados através do Genomic Data Commons (GDC)[^2].
 
@@ -41,7 +41,7 @@ Para começar com a análise, primeiro procedemos à **instalação** de algumas
 
 ## install.packages("data.table")
 
-# install.packages("summarytools")
+#install.packages("summarytools")
 
 # install.packages("ggpubr")
 
@@ -86,7 +86,7 @@ Depois da sua instalação, fizemos o seu **carregamento**!
 # library(tidyverse)
 # library(arules)
 # library(data.table)
-# library(summarytools)
+library(summarytools)
 # library(ggpubr)
 # library(limma)
 # library(Glimma)
@@ -103,16 +103,16 @@ Depois da sua instalação, fizemos o seu **carregamento**!
 # library(readxl)
 # library(tibble)
 # library(genefilter)
-# library(dplyr)
+library(dplyr)
 # library(gplots)
 # library(stringr)
 # library(sparseMatrixStats)
 # library(DelayedMatrixStats)
 ```
 
-# Datasets
+# **Datasets**
 
-## Transferência e leitura dos datastes
+## *Transferência e leitura dos datastes*
 
 Depois de importar as bibliotecas necessárias, começamos por **associar** os datasets presentes no repositório online [^3] a uma **variável**.
 
@@ -152,13 +152,13 @@ RNA_cpm = read.table("data_mrna_seq.txt", header = T, sep = '\t')
 
 data_patient = read.table("data_patient.txt", header = T, sep = '\t')
 
-data_sample = read_tsv("data_sample.txt", na = "")
+data_sample = read_tsv("data_sample.txt", na = "", show_col_types = FALSE)
 
 data_mutations = read.table("data_mutations.txt", header = T, sep = '\t')
 
 ```
 
-## Pré-processamento dos dados {.tabset}
+## *Pré-processamento dos dados* {.tabset}
 
 ### RNA_cpm
 
@@ -224,7 +224,7 @@ Nesta fase, e através de verificação manual, percebemos que o nome é de fact
 
 Optamos então por adicionar "\_duplicado" para os distinguir.
 
--   **RNA_cpm[which(duplicated(RNA_cpm[,1])),1] = paste(RNA_cpm[which(duplicated(RNA_cpm[,1])),1], "_duplicado", sep = "")** -\> Adiciona o "duplicado";
+-   \*\*RNA_cpm[which(duplicated(RNA_cpm[,1])),1] = paste(RNA_cpm[which(duplicated(RNA_cpm[,1])),1], "\_duplicado", sep = "")\*\* -\> Adiciona o "duplicado";
 
 -   **which(duplicated(RNA_cpm[,1]))** -\> Retorna as posições das linhas duplicadas da primeira coluna;
 
@@ -301,6 +301,101 @@ verificar_zero_frequente <- function(RNA_cpm) {
 
 ### Metadados {.tabset}
 
+#### data_sample
+
+Começámos por verificar alguns aspetos relativos ao dataset:
+
+```{r Formato do dataset}
+class(data_sample) # Há vários formatos, um deles é de dataframe, como queremos
+
+data_sample = as.data.frame(data_sample) #Se quiser estabelecer em um formato só.
+
+class(data_sample)
+
+str(data_sample)
+
+```
+
+Havia vários formatos neste dataset, então decidimos estabelecer tudo como dataframe!
+
+De seguida, para facilitar a nossa análise, colocamos o nome das colunas a corresponder aos outros datasets:
+
+```{r Correspondência de colunas}
+
+colnames(data_sample)
+
+colnames(data_sample) = data_sample[4,]
+
+colnames(data_sample)
+
+
+```
+
+Agora, já podemos ver a dimensão do dataframe:
+
+```{r Dimensão do dataframe}
+
+dim(data_sample)
+
+```
+
+O dataframe possui 676 linhas, correspondentes a amostras e 75 colunas correspondentes a variáveis.
+
+As linhas não estão associadas a nada, então, foi necessário associar cada linha ao ID de uma amostra:
+
+```{r Associar as linhas}
+
+row.names(data_sample) = data_sample$SAMPLE_ID
+
+row.names(data_sample)  
+
+row.names(data_sample) = gsub("-", ".", row.names(data_sample)) 
+
+row.names(data_sample)
+
+data_sample = data_sample[,-2]
+
+```
+
+Para além de fazermos a associação, removemos ainda a segunda coluna do dataframe.
+
+Depois, verificamos se existem duplicados no ID dos pacientes e no ID das amostras:
+
+```{r Verificar duplicados}
+
+any(duplicated(data_sample$PATIENT_ID))
+
+any(duplicated(data_sample$SAMPLE_ID))
+
+```
+
+Percebemos que existem IDs dos pacientes duplicados, o que demonstra que várias amostras podem ter sido retiradas do mesmo paciente!
+
+Além disso, não existem amostras duplicadas, tal como era previsto.
+
+No entanto, nem todas as amostras foram utilizadas para o processo de análise de RNAseq. Existem duas variáveis nos metadados: RNA sequenced e RNA seq analysis.
+
+Através da tabela de dados de RNA-seq, sabemos que 451 amostras foram analisadas.
+
+```{r Filtração dos dados}
+
+table(data_sample$RNA_SEQ_ANALYSIS)
+
+pie(table(data_sample$RNA_SEQ_ANALYSIS), main = "RNA-Seq analysis?")
+
+sample_data_rna = data_sample[data_sample$RNA_SEQ_ANALYSIS == 'Yes',]
+
+dim(sample_data_rna)
+
+sum(row.names(sample_data_rna) %in% colnames(RNA_cpm))
+
+```
+
+O código em cima serviu como filtro para perceber que dados de RNA-seq utilizar nas análises posteriores, garantindo que coincidem com os dados do dataset "RNA_cpm".
+
+
+
+
 #### data_patient
 
 Começámos por verificar alguns aspetos relativos ao dataset:
@@ -344,61 +439,74 @@ sum(is.na(data_patient)) # há NA mas é normal em metadados e não iremos fazer
 
 Existem NAs, mas em metadados é normal e por isso iremos mantê-los por agora.
 
-#### data_sample
+Por fim, realizamos a criação de um subset, tal como fizemos com os metadados anteriores, para garantir um dataframe com dados de pacientes presentes em "sample_data_rna", garantindo assim uma análise aos pacientes para os quais possuimos dados relevantes.
+
+```{r Filtração dos dados p}
+
+patient_data_rna = data_patient %>% filter(data_patient$PATIENT_ID %in% sample_data_rna$PATIENT_ID)
+
+
+```
+
+
+### data_mutations
 
 Começámos por verificar alguns aspetos relativos ao dataset:
 
 ```{r}
-class(data_sample) # Há vários formatos, um deles é de dataframe, como queremos
 
-data_sample = as.data.frame(data_sample) #Se quiser estabelecer em um formato só.
+class(data_mutations) 
 
-class(data_sample)
+dim(data_mutations)
 
-str(data_sample)
+unlist(lapply(data_mutations,class))
 
-```
+row.names(data_mutations)
 
-Havia vários formatos neste dataset, então decidimos estabelecer tudo como dataframe!
+row.names(data_mutations) = data_mutations$Hugo_Symbol Esta linha está a dar erro, cria duplicados
 
-De seguida, para facilitar a nossa análise, colocamos o nome das colunas a corresponder aos outros datasets:
-
-```{r}
-
-colnames(data_sample)
-
-colnames(data_sample) = data_sample[4,]
-
-colnames(data_sample)
-
+sum(is.na(data_mutations))
 
 ```
 
-Agora, já podemos ver a dimensão do dataframe:
+É possível ver que temos um dataframe com 9910 linhas e 64 colunas. 
+No dataframe existem também um número bastante elevados de NAs, 155469.
 
-```{r}
+De seguida, vamos verificar a estrutura interna dos dados de cada coluna:
 
-dim(data_sample)
+```{r Preparação dos dados}
+
+str(data_mutations)
+
+colunas_fator <- c(1, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,29,30,31,32, 33, 45, 47, 48, 51, 57, 60, 64)
+
+colunas_numericas <- c(34,35,36,37,43, 54, 58, 63)
+
+colunas_char <- c(2,6,7)
+
+data_mutations[, colunas_fator]<- lapply(data_mutations[, colunas_fator], as.factor)
+
+data_mutations[, colunas_numericas]<- lapply(data_mutations[, colunas_numericas], as.numeric)
+
+data_mutations[, colunas_char]<- lapply(data_mutations[, colunas_char], as.character)
+
+str(data_mutations)
 
 ```
-O dataframe possui 676 linhas, correspondentes a amostras e 75 colunas correspondentes a variáveis.
 
-As linhas não estão associadas a nada, então, foi necessário associar cada linha ao ID de uma amostra:
+Ao analisar a estrutura de dados de cada coluna, percebemos que era necessário transformar alguns dos dados para facilitar a sua manipulação:
 
-```{r}
+- os valores das colunas presentes no vetor associado a "colunas_fator" foram transformadas em fatores;
 
-row.names(data_sample) = data_sample$SAMPLE_ID
+- os valores das colunas presentes no vetor associado a "colunas_numericas" foram transformados em valores numéricos;
 
-row.names(data_sample)  
+- os valores das colunas presentes no vetor associado a "colunas_char" foram transformados em caracteres. 
 
-row.names(data_sample) = gsub("-", ".", row.names(data_sample)) 
+Por fim, procedemos à criação de um subset que contém apenas as linhas de "data_mutations" correspondentes às mutações que estão presentes nos dados de "RNA_cpm" para restringir a análise apenas às mutações para as quais temos dados de expressão gênica.
 
-row.names(data_sample)
+```{r Filtração dos dados m}
 
-data_sample = data_sample[,-2]
+mutations_subset = data_mutations %>% filter(data_mutations$Hugo_Symbol %in% RNA_cpm$Hugo_Symbol)
 
 ```
-
-Para além de fazermos a associação, removemos ainda a segunda coluna do dataframe.
-
 
