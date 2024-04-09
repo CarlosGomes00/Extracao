@@ -35,6 +35,9 @@ Este trabalho tem como objetivo analisar os dados de expressão de pacientes com
 Para começar com a análise, primeiro procedemos à **instalação** de algumas bibliotecas!
 
 ```{r Instalação dos packages}
+
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
 # install.packages("tidyverse")
 
 ## install.packages("arules")
@@ -65,7 +68,9 @@ Para começar com a análise, primeiro procedemos à **instalação** de algumas
 #    install.packages("BiocManager")
 # BiocManager::install("GO.db")
 
-# install.packages("car")
+install.packages("car", dependencies = "Imports")
+
+install.packages("carData")
 
 # install.packages("caret")
 
@@ -87,13 +92,13 @@ Depois da sua instalação, fizemos o seu **carregamento**!
 # library(arules)
 # library(data.table)
 library(summarytools)
-# library(ggpubr)
+library(ggpubr)
 # library(limma)
 # library(Glimma)
 # library(edgeR)
 # library(org.Hs.eg.db)
 # library(GO.db)
-# library(car)
+library(car)
 # library(caret)
 # library(RColorBrewer)
 # library(gplots)
@@ -104,6 +109,7 @@ library(summarytools)
 # library(tibble)
 # library(genefilter)
 library(dplyr)
+library(ggplot2)
 # library(gplots)
 # library(stringr)
 # library(sparseMatrixStats)
@@ -511,14 +517,14 @@ mutations_subset = data_mutations %>% filter(data_mutations$Hugo_Symbol %in% RNA
 ```
 
 
-# Sumarização dos dados
+# **Sumarização dos dados**
 
 
-## data_patient
+## *data_patient*
 
 
 
-```{r}
+```{r Sumarização data_patient}
 
 print(dfSummary(data_patient, style = 'grid', graph.magnif = 1, valid.col = FALSE,
                 max.distinct.values = 5, col.widths = c(100, 200, 200, 350, 500, 250),
@@ -570,7 +576,7 @@ ESCREVER RESULTADOS
 
 Acabamos ainda por identificar ainda o diagnóstico mais recorrente.
 
-```{r}
+```{r Diag mais recorrente data_patient}
 
 d = table(relev_data_patient$DIAGNOSIS)
 
@@ -584,4 +590,250 @@ nome_maximo
 
 ```
 
-## data_sample
+## *data_sample*
+
+```{r Sumariazação data_sample}
+print(dfSummary(data_sample, style = 'grid', graph.magnif = 1, valid.col = FALSE,
+                max.distinct.values = 5, col.widths = c(100, 200, 200, 350, 500, 250),
+                dfSummary.silent  = TRUE, headings = FALSE, justify = 'l')
+      , method = 'render', max.tbl.height = 500)
+
+```
+
+
+Depois consideramos variáveis relevantes:
+
+```{r}
+
+colunas_relevantes = c("PATIENT_ID", "GROUP", "SAMPLE_SITE", "PLATFORM", "PB_LYMPHOCYTES_PERCENTAGE", "PB_MONOCYTES_PERCENTAGE")
+
+relev_data_sample <- data_sample[,colunas_relevantes]
+
+pie(table(relev_data_sample$SAMPLE_SITE), main = "Local de recolha das amostras")
+
+```
+
+O gráfico demonstra como as amostras estão distribuídas pelos locais de recolha.
+
+Por último verificamos qual o nome do grupo de diagnóstico mais frequente nos dados
+
+```{r Diag mais recorrente data_sample}
+
+x = table(relev_data_sample$GROUP)
+
+x = as.data.frame(x)
+
+indice_maximo <- which.max(x$Freq)
+
+nome_maximo <- x$Var1[indice_maximo]
+
+nome_maximo
+
+```
+
+
+
+## *data_mutations*
+
+```{r Sumarização data_mutations}
+
+print(dfSummary(data_mutations, style = 'grid', graph.magnif = 1, valid.col = FALSE,
+                max.distinct.values = 5, col.widths = c(100, 200, 200, 350, 500, 250),
+                dfSummary.silent  = TRUE, headings = FALSE, justify = 'l')
+      , method = 'render', max.tbl.height = 500)
+
+```
+
+
+Considerando as variáveis relevantes:
+
+```{r}
+
+colunas_relevantes = c("Chromosome", "Start_Position", "End_Position", "Strand", "Variant_Classification", "Variant_Type", "Tumor_Seq_Allele1", "Tumor_Seq_Allele2", "Validation_Status", "Mutation_Status", "impact", "t_vaf", "tumor_only")
+
+relev_data_mutations = data_mutations[, colunas_relevantes]
+
+barplot(table(relev_data_mutations$Chromosome), main = "Cromossomos", col = "4")
+
+pie(table(relev_data_mutations$Variant_Type), main = "Tipo de variação")
+
+```
+
+Com o código em cima, geramos um gráfico de barras que mostra a contagem de ocorrências de cada cromossoma, e um gráfico de pizza para perceber a distribuição dos tipos de variantes no dataframe.
+
+Depois, verificamos qual a mutação mais comum no Alelo 1 entre as amostras analisadas
+
+```{r Mutação mais comum 1}
+
+mut = table(relev_data_mutations$Tumor_Seq_Allele1)
+
+mut = as.data.frame(mut)
+
+indice_maximo <- which.max(mut$Freq)
+
+nome_maximo <- mut$Var1[indice_maximo]
+
+nome_maximo # A mutação mais comun é a alteração por C
+
+```
+
+ESCREVER SOBRE A MUTAÇÃO MAIS COMUM
+
+
+Analisamos ainda qual a mutação mais comum no Alelo 2 entre as amostras analisadas:
+
+```{r}
+
+mut2 = table(relev_data_mutations$Tumor_Seq_Allele2)
+
+mut2 = as.data.frame(mut2)
+
+indice_maximo <- which.max(mut2$Freq)
+
+nome_maximo <- mut2$Var1[indice_maximo]
+
+nome_maximo # A mutação mais comum é a alteração por T
+
+```
+
+ESCREVER SOBRE A MUTAÇÃO MAIS COMUM
+
+
+# **Análise Exploratória**
+
+```{r}
+variaveis_patient = c('PATIENT_ID', 'SEX', 'AGE_AT_DIAGNOSIS', 'PRIOR_CANCER', 'TREATMENT_TYPE')
+
+variaveis_sample = c('PATIENT_ID', 'SAMPLE_ID', 'GROUP', 'SAMPLE_SITE')
+
+subset_patient <- patient_data_rna[, variaveis_patient]
+
+subset_sample <- sample_data_rna[, variaveis_sample]
+
+```
+
+
+# **Análise Univariada**
+
+```{r}
+
+mutation_subset
+
+sample_data_rna
+
+patient_data_rna
+
+```
+
+
+```{r}
+
+table(patient_data_rna$SEX) #apenas dois grupos
+# Testar a variância
+
+variancia_por_sexo <- tapply(patient_data_rna$AGE_AT_DIAGNOSIS, patient_data_rna$SEX, var, na.rm = TRUE)
+
+variancia_por_sexo
+# Testar a normalidade
+
+teste_normalidade_masculino=shapiro.test(patient_data_rna$AGE_AT_DIAGNOSIS[patient_data_rna$SEX == "Male"])
+
+teste_normalidade_feminino=shapiro.test(patient_data_rna$AGE_AT_DIAGNOSIS[patient_data_rna$SEX == "Female"])
+
+print(teste_normalidade_masculino)
+
+print(teste_normalidade_feminino)
+
+
+
+qqPlot(patient_data_rna$AGE_AT_DIAGNOSIS[patient_data_rna$SEX == "Male"], main = "Q-Q Plot - Masculino")
+
+qqPlot(patient_data_rna$AGE_AT_DIAGNOSIS[patient_data_rna$SEX == "Female"], main = "Q-Q Plot - Feminino")
+```
+
+As variâncias são próximas entre os diferentes grupos, e com os gráficos qqPlot e as análisesde normalidade, é possível ver que as distribuições não são normais,  considerando um tamanho elevado das amostras, vamos determiar um t test e analisar relação entre sexo e idade. 
+
+```{r}
+
+t.test(patient_data_rna$AGE_AT_DIAGNOSIS ~ patient_data_rna$SEX, na.rm = TRUE)
+
+```
+
+
+É possível ver uma diferença nos dados referente aos homens e mulheres.
+
+
+```{r}
+
+qqPlot(patient_data_rna$AGE_AT_DIAGNOSIS, main = "Q-Q Plot")
+
+idades_sem_na <- na.omit(patient_data_rna$AGE_AT_DIAGNOSIS)
+
+# Criar gráfico de densidade sem valores ausentes
+ggdensity(idades_sem_na,
+          main = "Gráfico de densidade para a idade dos pacientes",
+          xlab = "Idade dos pacientes")
+
+```
+
+## *Análise de varáveis no metadado de mutações*
+
+- "n_vaf" (Frequência do Alelo Variante Normalizado), é uma medida da frequência do alelo variante, normalizada para o número total de leituras, e é comumente usada em análises de variantes genéticas.
+
+- Impact: variável que se refere ao efeito ou consequência que uma determinada mutação pode ter em um gene ou em uma função biológica específica.
+
+```{r Avaliar a distruição variável}
+# Avaliar a distribuição variável
+
+sum(is.na(mutations_subset$n_vaf))
+ggdensity(mutations_subset$n_vaf)
+
+table(mutations_subset$impact)
+
+qqPlot(mutations_subset$n_vaf) # não é normal
+leveneTest(mutations_subset$n_vaf~mutations_subset$impact)
+
+res = kruskal.test(mutations_subset$n_vaf~mutations_subset$impact, data = mutations_subset)
+res 
+```
+
+Não há diferenças estatisticamente significativas na distribuição da variável n_vaf entre os diferentes níveis de impact. 
+
+## Análise para as variáveis "AGE_AT_PROCUREMENT" e "ELN_2017":
+
+- "AGE_AT_PROCUREMENT" - Idade dos pacientes na aquisição das amostras
+- "ELN_2017" - variável usada para classificar pacientes com leucemia mieloide aguda (LMA) em diferentes grupo de risco. 
+
+```{r}
+table(data_sample$ELN_2017)
+
+summary(sample_data_rna$AGE_AT_PROCUREMENT)
+
+# Criar o gráfico de dispersão 
+ggplot(sample_data_rna, aes(x = ELN_2017, y = AGE_AT_PROCUREMENT, color = ELN_2017)) +
+  geom_point(size = 3) +  
+  labs(x = "Classificação de Risco ELN 2017", y = "Idade na Aquisição", title = "Idade na Aquisição vs. Classificação de Risco ELN 2017") +  
+  theme_minimal() +  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+```{r Análise a normalidade e variancias}
+
+qqPlot(sample_data_rna$AGE_AT_PROCUREMENT)
+
+shapiro.test(sample_data_rna$AGE_AT_PROCUREMENT) 
+
+leveneTest(AGE_AT_PROCUREMENT ~ ELN_2017, data = sample_data_rna)
+
+anova_result <- aov(AGE_AT_PROCUREMENT ~ ELN_2017, data = sample_data_rna)
+
+summary(anova_result)
+
+tukey_result <- TukeyHSD(anova_result)
+
+print(tukey_result)
+```
+
+Considerando um elevado tamanho da amostra, a análise ANOVA foi feita, mesmo a variável  "AGE_AT_PROCUREMENT" não seguindo a normalida. É possível determinar que a idade dos pacientes interferem na determinação dos diferentes grupos "Favoravel" e "Adverse"
