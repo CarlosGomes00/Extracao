@@ -109,7 +109,7 @@ E por fim a **leitura** desses ficheiros.
 
 ```{r Leitura dos ficheiros}
 
-RNA_cpm = read.table("data_mrna_seq.txt", header = T, sep = '\t')
+RNA_cpm = read.table("data_mrna_seq.txt", header = T, sep = '\t')   # Necessário ter o ficheiro na mesma diretoria
 
 data_patient = read.table("data_patient.txt", header = T, sep = '\t')
 
@@ -395,7 +395,7 @@ O código em cima serviu como filtro para perceber que dados de RNA-seq utilizar
 
 Começámos por verificar alguns aspetos relativos ao dataset:
 
-```{r Classes dos metadados}
+```{r Classes de data_patient}
 
 class(data_patient)
 
@@ -454,7 +454,6 @@ Por fim, realizamos a criação de um subset, tal como fizemos com os metadados 
 
 patient_data_rna = data_patient %>% filter(data_patient$PATIENT_ID %in% sample_data_rna$PATIENT_ID)
 
-
 ```
 
 -   **patient_data_rna = data_patient %>% filter(data_patient$PATIENT_ID %in% sample_data_rna$PATIENT_ID)** -\> Cria um novo dataframe ("patient_data_rna") filtrando o dataframe ("data_patient") com base nos IDs dos pacientes presentes no dataframe.
@@ -464,7 +463,7 @@ patient_data_rna = data_patient %>% filter(data_patient$PATIENT_ID %in% sample_d
 
 Começámos por verificar alguns aspetos relativos ao dataset:
 
-```{r}
+```{r Classes de data_mutations}
 
 class(data_mutations) 
 
@@ -539,9 +538,6 @@ Por fim, procedemos à criação de um subset que contém apenas as linhas de "d
 mutations_subset = data_mutations %>% filter(data_mutations$Hugo_Symbol %in% RNA_cpm$Hugo_Symbol)
 
 ```
-
-
-
 
 # **Sumarização dos dados**
 
