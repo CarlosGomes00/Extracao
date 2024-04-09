@@ -282,9 +282,9 @@ str(data_sample)
 
 -   **class(data_sample)** -\> Retorna a classe do dataset;
 
--   **data_sample = as.data.frame(data_sample)** -\> Converte o dataset todo num dataframe
+-   **data_sample = as.data.frame(data_sample)** -\> Converte o dataset todo num dataframe;
 
--   **str(data_sample)** -\> Fornece uma descrição sobre a estrutura do dataframe
+-   **str(data_sample)** -\> Fornece uma descrição sobre a estrutura do dataframe.
 
 Havia vários formatos neste dataset, então decidimos estabelecer tudo como dataframe! Verificamos também que a classe de todas as colunas correspondem a um "character".
 
@@ -302,7 +302,7 @@ colnames(data_sample)
 
 -   **colnames(data_sample)** -\> Retorna a classe do dataset;
 
--   **colnames(data_sample) = data_sample[4,]** -\> Converte o dataset todo num dataframe
+-   **colnames(data_sample) = data_sample[4,]** -\> Converte o dataset todo num dataframe.
 
 Agora, já podemos ver a dimensão do dataframe:
 
@@ -332,13 +332,13 @@ data_sample = data_sample[,-2]
 
 ```
 
--   **row.names(data_sample) = data_sample$SAMPLE_ID** -\> Associa os IDs das amostras com o nome das linhas do dataframe
+-   **row.names(data_sample) = data_sample$SAMPLE_ID** -\> Associa os IDs das amostras com o nome das linhas do dataframe;
 
--   **row.names(data_sample)** -\> Imprime o nome das linhas do dataframe
+-   **row.names(data_sample)** -\> Imprime o nome das linhas do dataframe;
 
--   **row.names(data_sample) = gsub("-", ".", row.names(data_sample))** -\> Substitui todos os hifens nas linhas por pontos
+-   **row.names(data_sample) = gsub("-", ".", row.names(data_sample))** -\> Substitui todos os hifens nas linhas por pontos;
 
--   **data_sample = data_sample[,-2]** -\> Remove a segunda coluna do dataframe
+-   **data_sample = data_sample[,-2]** -\> Remove a segunda coluna do dataframe.
 
 
 Para além de fazermos a associação, removemos ainda a segunda coluna do dataframe e ainda substituimos os hifens das linhas por pontos, de forma a padronizar a formatação dos nomes das linhas.
@@ -353,9 +353,9 @@ any(duplicated(data_sample$SAMPLE_ID))
 
 ```
 
--   **any(duplicated(data_sample$PATIENT_ID))** -\> Verifica se existe algum valor duplicado na coluna "PATIENT_ID"
+-   **any(duplicated(data_sample$PATIENT_ID))** -\> Verifica se existe algum valor duplicado na coluna "PATIENT_ID";
 
--   **any(duplicated(data_sample$SAMPLE_ID))** -\> Verifica se existe algum valor duplicado na coluna "SAMPLE_ID"
+-   **any(duplicated(data_sample$SAMPLE_ID))** -\> Verifica se existe algum valor duplicado na coluna "SAMPLE_ID".
 
 Percebemos que existem IDs dos pacientes duplicados, o que demonstra que várias amostras podem ter sido retiradas do mesmo paciente!
 
@@ -364,6 +364,7 @@ Além disso, não existem amostras duplicadas, tal como era previsto.
 No entanto, nem todas as amostras foram utilizadas para o processo de análise de RNAseq. Existem duas variáveis nos metadados: RNA sequenced e RNA seq analysis.
 
 Através da tabela de dados de RNA-seq, sabemos que 451 amostras foram analisadas.
+
 
 ```{r Filtração dos dados}
 
@@ -379,9 +380,15 @@ sum(row.names(sample_data_rna) %in% colnames(RNA_cpm))
 
 ```
 
+-   **table(data_sample$RNA_SEQ_ANALYSIS)** -\> Conta a frequência de cada categoria presente na coluna "RNA_SEQ_ANALYSIS";
+
+-   **pie(table(data_sample$RNA_SEQ_ANALYSIS), main = "RNA-Seq analysis?")** -\> Cria um pie chart que mostra a distribuição dos valores da coluna;
+
+-   **sample_data_rna = data_sample[data_sample$RNA_SEQ_ANALYSIS == 'Yes',]** -\> Filtra o dataframe para icluir apenas os valores que correspondem a "YES";
+
+-   **sum(row.names(sample_data_rna) %in% colnames(RNA_cpm))** -\> Calcula o número de linhas em "sample_data_rna" que estão presentes nas colunas do "RNA_cpm".
+
 O código em cima serviu como filtro para perceber que dados de RNA-seq utilizar nas análises posteriores, garantindo que coincidem com os dados do dataset "RNA_cpm".
-
-
 
 
 #### data_patient
@@ -408,24 +415,38 @@ data_patient <- data_patient[,-1]
 
 ```
 
-O dataset é um dataframe com 562 linhas...
+-   **unlist(lapply(data_patient,class)))** -\> Aplica a função class a cada coluna do dataframe usando lapply, em seguida, unlist é usada para converter a lista resultante num vetor;
+
+-   **row.names(data_patient) <- data_patient$PATIENT_ID** -\> Associa os IDs dos pacientes como os nomes das linhas do dataframe;
+
+-   **data_patient <- data_patient[,-1]** -\> Seleciona todas as linhas do dataframe, com exceção da primeira.
+
+O dataset corresponde a um dataframe com 562 amostras e 22 variáveis. As colunas possuem três tipos de estrutura de dados ("character", "integer" e "numeric") 
 
 ```{r Transformação das Variáveis}
 
 str(data_patient)
+
 data_patient[, c(1,2,4,5,7, 8, 9, 10, 11, 12, 13, 14, 18, 20, 21)] <- lapply(data_patient[, c(1,2,4,5,7, 8, 9, 10, 11, 12, 13, 14, 18, 20, 21)], as.factor)
 
 ```
 
+-   **data_patient[, c(1,2,4,5,7, 8, 9, 10, 11, 12, 13, 14, 18, 20, 21)] <- lapply(data_patient[, c(1,2,4,5,7, 8, 9, 10, 11, 12, 13, 14, 18, 20, 21)], as.factor)** -\> Converte as colunas selecionadas do dataframe para fator.
+
+Esta transformação é feita para possibilitar a análise destas colunas como variáveis categóricas.
+ 
 Depois vamos ver se exitem NAs.
 
 ```{r Verificação de NAs}
 
-sum(is.na(data_patient)) # há NA mas é normal em metadados e não iremos fazer nada
+sum(is.na(data_patient))
 
 ```
 
-Existem NAs, mas em metadados é normal e por isso iremos mantê-los por agora.
+-   **sum(is.na(data_patient))** -\> Calcula a soma de todos os NAs.
+
+
+Existem 71 NAs, mas em metadados é normal e por isso iremos mantê-los por agora.
 
 Por fim, realizamos a criação de um subset, tal como fizemos com os metadados anteriores, para garantir um dataframe com dados de pacientes presentes em "sample_data_rna", garantindo assim uma análise aos pacientes para os quais possuimos dados relevantes.
 
@@ -435,6 +456,8 @@ patient_data_rna = data_patient %>% filter(data_patient$PATIENT_ID %in% sample_d
 
 
 ```
+
+-   **patient_data_rna = data_patient %>% filter(data_patient$PATIENT_ID %in% sample_data_rna$PATIENT_ID)** -\> Cria um novo dataframe ("patient_data_rna") filtrando o dataframe ("data_patient") com base nos IDs dos pacientes presentes no dataframe.
 
 
 ### data_mutations
@@ -451,11 +474,17 @@ unlist(lapply(data_mutations,class))
 
 row.names(data_mutations)
 
-row.names(data_mutations) = data_mutations$Hugo_Symbol #Esta linha está a dar erro, cria duplicados
+row.names(data_mutations) = make.unique(data_mutations$Hugo_Symbol) 
 
 sum(is.na(data_mutations))
 
 ```
+
+-   **unlist(lapply(data_mutations,class))** -\> Aplica a função class a cada coluna do dataframe;
+
+
+-   **row.names(data_mutations) = make.unique(data_mutations$Hugo_Symbol) ** -\> Associa os dados presentes na coluna "Hugo_Symbol" com os nomes das linhas nos dataframes, e para evitar duplicados, adiciona um sufixo.
+
 
 É possível ver que temos um dataframe com 9910 linhas e 64 colunas. 
 No dataframe existem também um número bastante elevados de NAs, 155469.
@@ -482,6 +511,19 @@ str(data_mutations)
 
 ```
 
+-   **colunas_fator <- c(1, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,29,30,31,32, 33, 45, 47, 48, 51, 57, 60, 64)** -\> Cria um vetor com colunas para as transformar em fatores;
+
+-   **colunas_numericas <- c(34,35,36,37,43, 54, 58, 63)** -\> Cria um vetor com colunas para as transformar em valores numéricos;
+
+-   **colunas_char <- c(2,6,7)** -\> Cria um vetor com colunas para as transformar em caracteres;
+
+-   **data_mutations[, colunas_fator]<- lapply(data_mutations[, colunas_fator], as.factor)** -\> Transforma as colunas selecionadas anteriormente em fatores;
+
+-   **data_mutations[, colunas_numericas]<- lapply(data_mutations[, colunas_numericas], as.numeric)** -\> Transforma as colunas selecionadas anteriormente em numéricos;
+
+-   **data_mutations[, colunas_char]<- lapply(data_mutations[, colunas_char], as.character)** -\>Transforma as colunas selecionadas anteriormente em caracteres;
+
+
 Ao analisar a estrutura de dados de cada coluna, percebemos que era necessário transformar alguns dos dados para facilitar a sua manipulação:
 
 - os valores das colunas presentes no vetor associado a "colunas_fator" foram transformadas em fatores;
@@ -497,6 +539,8 @@ Por fim, procedemos à criação de um subset que contém apenas as linhas de "d
 mutations_subset = data_mutations %>% filter(data_mutations$Hugo_Symbol %in% RNA_cpm$Hugo_Symbol)
 
 ```
+
+
 
 
 # **Sumarização dos dados**
