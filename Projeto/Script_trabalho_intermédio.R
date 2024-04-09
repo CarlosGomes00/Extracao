@@ -256,3 +256,66 @@ anova_result <- aov(AGE_AT_PROCUREMENT ~ ELN_2017, data = sample_data_rna)
 summary(anova_result)
 tukey_result <- TukeyHSD(anova_result)
 print(tukey_result)
+
+
+
+##################### Expressão diferencial ###############################
+#preparação dos dados para DE - filtragem
+selected_genes <- rowMeans(RNA_cpm > 1) > 0.5
+RNA_cpm_filtered <- RNA_cpm[selected_genes, ]
+RNA_cpm_filtered
+
+#Associar o sexo do paciente a cada amostra e depois definir o design experimental
+subset_sample <- merge(subset_sample, subset_patient[, c("PATIENT_ID", "SEX")], by = "PATIENT_ID", all.x = TRUE)
+Sexo = subset_sample$SEX
+table(Sexo)
+design = model.matrix(~0+Sexo, data = RNA_cpm_filtered)
+colnames(design) = levels(Sexo)
+design
+
+#Tentativas para fazer a analise DE da melhor forma
+fit = lmFit(RNA_cpm_filtered, design)
+contrast = makeContrasts(Female - Male, levels=design)
+fit = contrasts.fit(fit, contrast)
+fit = eBayes(fit)
+summa.fit = decideTests(fit)
+summary(summa.fit)
+plotMD(fit)
+
+v <- voom(RNA_cpm_filtered,design,plot = TRUE)
+fit_v <- lmFit(v, design)
+fit_v.cont <- contrasts.fit(fit_v, contrast)
+fit_v.cont <- eBayes(fit_v.cont)
+summary(decideTests(fit_v.cont))
+plotMD(fit_v.cont)
+
+fit_log = lmFit(log2(RNA_cpm_filtered + 1), design)
+fit_log = contrasts.fit(fit_log, contrast)
+fit_log = eBayes(fit_log, trend=T)
+summa.fit_log = decideTests(fit_log)
+summary(summa.fit_log)
+plotMD(fit_log)
+
+#Outra variável (tipo de amostra)
+subset_sample$SAMPLE_SITE = as.factor(subset_sample$SAMPLE_SITE)
+levels(subset_sample$SAMPLE_SITE) = make.names(levels(subset_sample$SAMPLE_SITE))
+
+y <- DGEList(counts = RNA_cpm, genes = row.names(RNA_cpm), group = subset_sample$SAMPLE_SITE)
+contrast2 = makeContrasts( Bone_Leuk = Bone.Marrow.Aspirate - Leukapheresis, 
+                           Bone_Blood = Bone.Marrow.Aspirate - Peripheral.Blood,
+                           Leuk_Blood = Leukapheresis - Peripheral.Blood, levels=design2)
+keep <- filterByExpr(y, design2)
+y <- y[keep, , keep.lib.sizes=FALSE]
+design2 = model.matrix(~0+subset_sample$SAMPLE_SITE, data = y$samples)
+colnames(design2) = levels(subset_sample$SAMPLE_SITE)
+head(design2)
+v <- voom(y,design2, plot=T)
+fit2 <- lmFit(v, design2)
+fit2 <- contrasts.fit(fit2, contrast2)
+fit2 <- eBayes(fit2, trend = F, robust = F)
+summa.fit2 <- decideTests(fit2)
+summary(summa.fit2)
+plotMD(fit2,coef="Leuk_Blood",status=summa.fit2[,"Leuk_Blood"], values = c(-1, 1), hl.col=c("blue","red"), main = "Leukapheresis vs Periphal Blood")
+plotMD(fit2,coef="Bone_Leuk",status=summa.fit2[,"Bone_Leuk"], values = c(-1, 1), hl.col=c("blue","red"), main = "Leukapheresis vs Bone Marrow")
+volcanoplot(fit2,coef="Leuk_Blood",highlight=19,names=row.names(fit2), main ="Leukapheresis vs Periphal Blood")
+volcanoplot(fit2,coef="Bone_Leuk",highlight=11,names=row.names(fit2), main ="Leukapheresis vs Bone Marrow")
