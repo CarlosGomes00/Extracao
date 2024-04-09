@@ -36,84 +36,38 @@ Para começar com a análise, primeiro procedemos à **instalação** de algumas
 
 ```{r Instalação dos packages}
 
-options(repos = c(CRAN = "https://cloud.r-project.org"))
+# options(repos = c(CRAN = "https://cloud.r-project.org"))   Foi necessário definir um repositório no CRAN manualmente 
 
-# install.packages("tidyverse")
-
-## install.packages("arules")
-
-## install.packages("data.table")
-
-#install.packages("summarytools")
+# install.packages("summarytools")
 
 # install.packages("ggpubr")
 
-## if (!requireNamespace("BiocManager", quietly = TRUE))
-#    install.packages("BiocManager")
-# BiocManager::install("limma")
+# install.packages("tidyverse")
 
-## if (!requireNamespace("BiocManager", quietly = TRUE))
-#    install.packages("BiocManager")
-# BiocManager::install("Glimma")
+# install.packages("car", dependencies = "Imports")
 
-## if (!requireNamespace("BiocManager", quietly = TRUE))
-#    install.packages("BiocManager")
-# BiocManager::install("edgeR")
+# install.packages("carData")
 
-## if (!requireNamespace("BiocManager", quietly = TRUE))
-#    install.packages("BiocManager")
-# BiocManager::install("org.Hs.eg.db")
+#install.packages("readr")
 
-## if (!requireNamespace("BiocManager", quietly = TRUE))
-#    install.packages("BiocManager")
-# BiocManager::install("GO.db")
-
-install.packages("car", dependencies = "Imports")
-
-install.packages("carData")
-
-# install.packages("caret")
-
-## install.packages("RColorBrewer")
-
-## install.packages("gplots")
-
-# install.packages("FactoMineR")
-
-## install.packages("factoextra")
-
-# install.packages("readr")
 ```
 
 Depois da sua instalação, fizemos o seu **carregamento**!
 
 ```{r Import dos packages}
-# library(tidyverse)
-# library(arules)
-# library(data.table)
+
 library(summarytools)
-library(ggpubr)
-# library(limma)
-# library(Glimma)
-# library(edgeR)
-# library(org.Hs.eg.db)
-# library(GO.db)
+
 library(car)
-# library(caret)
-# library(RColorBrewer)
-# library(gplots)
-# library(FactoMineR)
-# library(factoextra)
- library(readr)
-# library(readxl)
-# library(tibble)
-# library(genefilter)
+
+library(readr)
+
 library(dplyr)
+
 library(ggplot2)
-# library(gplots)
-# library(stringr)
-# library(sparseMatrixStats)
-# library(DelayedMatrixStats)
+
+library(ggpubr)
+
 ```
 
 # **Datasets**
@@ -126,7 +80,8 @@ Depois de importar as bibliotecas necessárias, começamos por **associar** os d
 
 ```{r Associação dos datasets a uma variável}
 
-RNA_cpm_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_mrna_seq_cpm.txt"
+# RNA_cpm_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_mrna_seq_cpm.txt" 
+# Não está a fazer corretamente a leitura do ficheiro. Essa leitura só será possível utilizando o Git Large Files Storage, por isso para já utilizaremos uma cópia local
 
 data_patient_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_clinical_patient.txt"
 
@@ -140,7 +95,7 @@ De seguida, faz-se o **download** dos datasets e guardamos uma cópia local.
 
 ```{r Download dos Datasets}
 
-download.file(RNA_cpm_url, destfile="RNA_seq_cpm.txt")
+# download.file(RNA_cpm_url, destfile="RNA_seq_cpm.txt")
 
 download.file(data_patient_url, destfile="data_patient.txt") 
 
@@ -449,7 +404,7 @@ Por fim, realizamos a criação de um subset, tal como fizemos com os metadados 
 
 ```{r Filtração dos dados p}
 
-# patient_data_rna = data_patient %>% filter(data_patient$PATIENT_ID %in% sample_data_rna$PATIENT_ID)
+patient_data_rna = data_patient %>% filter(data_patient$PATIENT_ID %in% sample_data_rna$PATIENT_ID)
 
 
 ```
@@ -469,7 +424,7 @@ unlist(lapply(data_mutations,class))
 
 row.names(data_mutations)
 
-#row.names(data_mutations) = data_mutations$Hugo_Symbol Esta linha está a dar erro, cria duplicados
+row.names(data_mutations) = data_mutations$Hugo_Symbol #Esta linha está a dar erro, cria duplicados
 
 sum(is.na(data_mutations))
 
@@ -786,14 +741,17 @@ ggdensity(idades_sem_na,
 # Avaliar a distribuição variável
 
 sum(is.na(mutations_subset$n_vaf))
+
 ggdensity(mutations_subset$n_vaf)
 
 table(mutations_subset$impact)
 
 qqPlot(mutations_subset$n_vaf) # não é normal
+
 leveneTest(mutations_subset$n_vaf~mutations_subset$impact)
 
 res = kruskal.test(mutations_subset$n_vaf~mutations_subset$impact, data = mutations_subset)
+
 res 
 ```
 
