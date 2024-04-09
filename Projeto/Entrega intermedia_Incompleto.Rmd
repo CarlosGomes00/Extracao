@@ -222,9 +222,9 @@ any(is.na(RNA_cpm))
 
 -   **any(is.na(RNA_cpm))** -\> Verificar outra vez se há missing values
 
-Os valores omissos que existiam no dataframe estavam todos presentes na mesma coluna, por isso depois da sua eliminação, já não existem NAs.
+Os valores omissos que existiam no dataframe estavam todos presentes na mesma coluna ('Entrez_Gene_Id"), por isso depois da sua eliminação, já não existem NAs.
 
-Por último, decidimos verificar se existem genes com uma frequência de expressão zero, acima de 90% das amostras:
+Por último, decidimos verificar se existem genes com uma frequência de expressão zero, em acima de 90% das amostras:
 
 ```{r Retirar genes com expressão 0 frequente}
 
@@ -240,7 +240,7 @@ verificar_zero_frequente <- function(RNA_cpm) {
   return(genes_zero_frequente)
 }
 
-# verificar_zero_frequente(RNA_cpm)
+verificar_zero_frequente(RNA_cpm)
 
 ```
 
@@ -260,6 +260,9 @@ verificar_zero_frequente <- function(RNA_cpm) {
 
 -   **return(genes_zero_frequente)** -\> Retorna o vetor contendo o nome dos genes com expressão 0 maior que 90%.
 
+É possível observar que o código retorna o vetor vazio, o que significa que nenhum gene possui uma frequência de zeros superior a 90% em relação ao número total de amostras.
+
+
 ### Metadados {.tabset}
 
 #### data_sample
@@ -267,9 +270,9 @@ verificar_zero_frequente <- function(RNA_cpm) {
 Começámos por verificar alguns aspetos relativos ao dataset:
 
 ```{r Formato do dataset}
-class(data_sample) # Há vários formatos, um deles é de dataframe, como queremos
+class(data_sample) 
 
-data_sample = as.data.frame(data_sample) #Se quiser estabelecer em um formato só.
+data_sample = as.data.frame(data_sample)
 
 class(data_sample)
 
@@ -277,7 +280,13 @@ str(data_sample)
 
 ```
 
-Havia vários formatos neste dataset, então decidimos estabelecer tudo como dataframe!
+-   **class(data_sample)** -\> Retorna a classe do dataset;
+
+-   **data_sample = as.data.frame(data_sample)** -\> Converte o dataset todo num dataframe
+
+-   **str(data_sample)** -\> Fornece uma descrição sobre a estrutura do dataframe
+
+Havia vários formatos neste dataset, então decidimos estabelecer tudo como dataframe! Verificamos também que a classe de todas as colunas correspondem a um "character".
 
 De seguida, para facilitar a nossa análise, colocamos o nome das colunas a corresponder aos outros datasets:
 
@@ -289,8 +298,11 @@ colnames(data_sample) = data_sample[4,]
 
 colnames(data_sample)
 
-
 ```
+
+-   **colnames(data_sample)** -\> Retorna a classe do dataset;
+
+-   **colnames(data_sample) = data_sample[4,]** -\> Converte o dataset todo num dataframe
 
 Agora, já podemos ver a dimensão do dataframe:
 
@@ -300,9 +312,11 @@ dim(data_sample)
 
 ```
 
-O dataframe possui 676 linhas, correspondentes a amostras e 75 colunas correspondentes a variáveis.
+-   **dim(data_sample)** -\> Retorna um vetor com o número de linhas e o número de colunas no datafrmae;
 
-As linhas não estão associadas a nada, então, foi necessário associar cada linha ao ID de uma amostra:
+O dataframe possui **676** linhas, correspondentes a **amostras** e **75** colunas correspondentes a **variáveis**.
+
+As linhas do dataframe não estão associadas a nada, então, foi necessário associar cada linha ao ID de uma amostra:
 
 ```{r Associar as linhas}
 
@@ -318,7 +332,16 @@ data_sample = data_sample[,-2]
 
 ```
 
-Para além de fazermos a associação, removemos ainda a segunda coluna do dataframe.
+-   **row.names(data_sample) = data_sample$SAMPLE_ID** -\> Associa os IDs das amostras com o nome das linhas do dataframe
+
+-   **row.names(data_sample)** -\> Imprime o nome das linhas do dataframe
+
+-   **row.names(data_sample) = gsub("-", ".", row.names(data_sample))** -\> Substitui todos os hifens nas linhas por pontos
+
+-   **data_sample = data_sample[,-2]** -\> Remove a segunda coluna do dataframe
+
+
+Para além de fazermos a associação, removemos ainda a segunda coluna do dataframe e ainda substituimos os hifens das linhas por pontos, de forma a padronizar a formatação dos nomes das linhas.
 
 Depois, verificamos se existem duplicados no ID dos pacientes e no ID das amostras:
 
@@ -329,6 +352,10 @@ any(duplicated(data_sample$PATIENT_ID))
 any(duplicated(data_sample$SAMPLE_ID))
 
 ```
+
+-   **any(duplicated(data_sample$PATIENT_ID))** -\> Verifica se existe algum valor duplicado na coluna "PATIENT_ID"
+
+-   **any(duplicated(data_sample$SAMPLE_ID))** -\> Verifica se existe algum valor duplicado na coluna "SAMPLE_ID"
 
 Percebemos que existem IDs dos pacientes duplicados, o que demonstra que várias amostras podem ter sido retiradas do mesmo paciente!
 
