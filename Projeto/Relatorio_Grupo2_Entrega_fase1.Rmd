@@ -56,17 +56,13 @@ Depois da sua instalação, fizemos o seu **carregamento**!
 
 ```{r Import dos packages}
 library(summarytools)
-
 library(car)
-
 library(readr)
-
 library(dplyr)
-
 library(ggplot2)
-
 library(ggpubr)
-
+library(edgeR)
+library(limma)
 ```
 
 # **Datasets**
@@ -82,11 +78,11 @@ Depois de importar as bibliotecas necessárias, começamos por **associar** os d
 # RNA_cpm_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_mrna_seq_cpm.txt" 
 # Não está a fazer corretamente a leitura do ficheiro. Essa leitura só será possível utilizando o Git Large Files Storage, por isso para já utilizaremos uma cópia local
 
-data_patient_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_clinical_patient.txt"
+#data_patient_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_clinical_patient.txt"
 
-data_sample_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_clinical_sample.txt"
+#data_sample_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_clinical_sample.txt"
 
-data_mutations_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_mutations.txt"
+#data_mutations_url = "https://raw.githubusercontent.com/lais-carvalho/Trabalho-pratico/main/Dados/data_mutations.txt"
 
 ```
 
@@ -96,11 +92,11 @@ De seguida, faz-se o **download** dos datasets e guardamos uma cópia local.
 
 # download.file(RNA_cpm_url, destfile="RNA_seq_cpm.txt")
 
-download.file(data_patient_url, destfile="data_patient.txt") 
+#download.file(data_patient_url, destfile="data_patient.txt") 
 
-download.file(data_sample_url, destfile ="data_sample.txt")
+#download.file(data_sample_url, destfile ="data_sample.txt")
 
-download.file(data_mutations_url, destfile="data_mutations.txt")
+#download.file(data_mutations_url, destfile="data_mutations.txt")
 
 ```
 
@@ -108,13 +104,13 @@ E por fim a **leitura** desses ficheiros.
 
 ```{r Leitura dos ficheiros}
 
-RNA_cpm = read.table("data_mrna_seq_cpm.txt", header = T, sep = '\t')   # Necessário ter o ficheiro na mesma diretoria
+RNA_cpm = read.table("Dados/data_mrna_seq_cpm.txt", header = T, sep = '\t')   
 
-data_patient = read.table("data_patient.txt", header = T, sep = '\t')
+data_patient = read.table("Dados/data_clinical_patient.txt", header = T, sep = '\t')
 
-data_sample = read_tsv("data_sample.txt", na = "", show_col_types = FALSE)
+data_sample = read_tsv("Dados/data_clinical_sample.txt", na = "", show_col_types = FALSE)
 
-data_mutations = read.table("data_mutations.txt", header = T, sep = '\t')
+data_mutations = read.table("Dados/data_mutations.txt", header = T, sep = '\t')
 
 ```
 
@@ -226,19 +222,18 @@ Por último, decidimos verificar se existem genes com uma frequência de express
 
 ```{r Retirar genes com expressão 0 frequente}
 
-verificar_zero_frequente <- function(RNA_cpm) {
-  genes_zero_frequente <- character(0)
-  total_amostras <- ncol(RNA_cpm) - 1 
-  for (i in 1:nrow(RNA_cpm)) {
-    proporcao_zero <- sum(RNA_cpm[i, -1] == 0) / total_amostras
-    if (proporcao_zero > 0.9) {
-      genes_zero_frequente <- c(genes_zero_frequente, RNA_cpm[i, 1])
-    }
-  }
-  return(genes_zero_frequente)
-}
+#verificar_zero_frequente <- function(RNA_cpm) {genes_zero_frequente <- character(0)
+#  total_amostras <- ncol(RNA_cpm) - 1 
+#  for (i in 1:nrow(RNA_cpm)) {
+#    proporcao_zero <- sum(RNA_cpm[i, -1] == 0) / total_amostras
+#    if (proporcao_zero > 0.9) {
+#      genes_zero_frequente <- c(genes_zero_frequente, RNA_cpm[i, 1])
+#    }
+#  }
+#  return(genes_zero_frequente)
+#}
 
-verificar_zero_frequente(RNA_cpm)
+#verificar_zero_frequente(RNA_cpm)
 ```
 
 -   **verificar_zero_frequente \<- function(RNA_cpm) {...}** -\> Definir uma função;
@@ -860,13 +855,15 @@ Dado que os nossos dados já sofreram uma normalização TMM e são valores CPM,
 ```{r preparação dos dados para DE - filtragem}
 selected_genes <- rowMeans(RNA_cpm > 1) > 0.5
 RNA_cpm_filtered <- RNA_cpm[selected_genes, ]
-RNA_cpm_filtered
+RNA_cpm_filtered = RNA_cpm_filtered[, -1]
+head(RNA_cpm_filtered)
 ```
 Depois da filtragem, ficámos com 14405 genes para a análise de expressão diferencial.
 
 ```{r Associar o sexo do paciente a cada amostra}
-subset_sample <- merge(subset_sample, subset_patient[, c("PATIENT_ID", "SEX")], by = "PATIENT_ID", all.x = TRUE)
-subset_sample
+relev_data_patient$PATIENT_ID = row.names(relev_data_patient)
+relev_data_sample <- merge(relev_data_sample, relev_data_patient[, c("PATIENT_ID", "SEX")], by = "PATIENT_ID", all.x = TRUE)
+subset_sample = relev_data_sample
 ```
 ```{r Definição do design experimental}
 Sexo = subset_sample$SEX
@@ -879,6 +876,7 @@ head(design)
 
 ```{r Análise de expressão diferencial}
 logCPM = log2(RNA_cpm_filtered + 1)
+contrast = makeContrasts(Female - Male, levels = design)
 fit_log = lmFit(logCPM, design)
 fit_log = contrasts.fit(fit_log, contrast)
 fit_log = eBayes(fit_log, trend=T)
@@ -892,6 +890,7 @@ summary(summa.fit_log)
 ```{r}
 plotMD(fit_log)
 ```
+
 
 Não há genes diferencialmente expressos entre os sexos.
 
@@ -936,6 +935,8 @@ plotMD(fit2,coef="Bone_Leuk",status=summa.fit2[,"Bone_Leuk"], values = c(-1, 1),
 volcanoplot(fit2,coef="Leuk_Blood",highlight=19,names=row.names(fit2), main ="Leukapheresis vs Periphal Blood")
 volcanoplot(fit2,coef="Bone_Leuk",highlight=11,names=row.names(fit2), main ="Leukapheresis vs Bone Marrow")
 ```
+
+
 Para a expressão diferencial analisaram-se várias variáveis: sexo, tipo de amostra retirada, 
 Quanto ao sexo, não foram encontrados genes diferencialmente expressos, o que indica que o sexo não é um fator diferencial da expressão dos genes nas amostras destes pacientes.
 Na análise da expressão tendo em conta o tipo de amostra retirada (medula óssea, plasma do sangue periférico ou glóbulos brancos através de leucaférese (Leukapheresis), foram detetados alguns genes diferencialmente expressos entre as amostras. Na comparação entre glóbulos brancos e medula foram encontrados 8 genes subexpressos e 3 sobrexpressos, enquanto que para o contraste entre glóbulos vermelhos e soro foram encontrados 3 genes subexpressos e 16 sobrexpressos.No vulcano plot é ainda possível ver o nome dos genes diferencialmente expressos, sendo interessante destacar a presença dos mesmos genes na comparação dos genes diferencialmente expressos entre os glóbulos vermelhos e a medula ossea, e entre os glóbulos e o soro, sendo que os 3 genes subexpressos numa comparação são os 3 que estão sobrepxressos. Esta presença comum nas comparações sugere que a razão para a expressão diferencial destes 3 genes está nos globulos brancos, dado estarem nas duas comparações feitas. Adicionalmente, também é interessante destacar nesta análise a presença de genes associados à resposta imune (e.g. SIGLEC6 e ROBO4) e ao metabolismo celular (e.g. TMEM30B e PROSER1). 
