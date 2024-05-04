@@ -1,0 +1,997 @@
+---
+title: "**Trabalho Prático de Extração de Conhecimento de Dados Biológicos**"
+date: "`r Sys.Date()`"
+author: "Carlos Gomes (PG51681), Laís Carvalho (PG52536), Rita Nóbrega (PG46733)"
+output: 
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    theme: spacelab
+    number_sections: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+---
+
+```{=html}
+<style>
+  body {text-align:justify}
+</style>
+```
+
+------------------------------------------------------------------------
+
+# **Contextualização**
+
+O conjunto de dados selecionados para este trabalho foram retirados de um estudo cohort com 672 amostras recolhidas através de biopsias a 562 pacientes com Leucemia Mielóide Aguda (LMA)[^1]. Com o objetivo de correlacionar a sensibilidade e resistência de grupos de pacientes com LMA a tratamentos já existentes com a ocorrência de mutações, foram realizadas anotações clínicas detalhadas, estudos genómicos e transcriptómicos (com a sequenciação do exoma (622 amostras) e do RNA (451 amostras)), assim como testes *ex vivo* de sensibilidade a compostos. Os dados e estudo original podem ser consultados através do Genomic Data Commons (GDC)[^2].
+
+[^1]: (Tyner *et al*., 2018)
+
+[^2]: <https://www.cbioportal.org/study/summary?id=aml_ohsu_2018>
+
+Este trabalho tem como objetivo analisar os dados de expressão de pacientes com AML, comparando os seus dados transcriptómicos de acordo com o sexo e grupo dos pacientes, com vista a obter informações sobre genes diferencialmente expressos e enriquecidos, clusters de genes e/ou de amostras e que genes parecem ter maior importância no transcriptoma associado a AML.
+
+Para começar com a análise, primeiro procedemos à **instalação** de algumas bibliotecas!
+
+```{r Instalação dos packages}
+
+# options(repos = c(CRAN = "https://cloud.r-project.org"))   Foi necessário definir um repositório no CRAN manualmente 
+# install.packages("summarytools")
+# install.packages("ggpubr")
+# install.packages("tidyverse")
+# install.packages("car", dependencies = "Imports")
+# install.packages("carData")
+#install.packages("readr")
+
+```
+
+Depois da sua instalação, fizemos o seu **carregamento**!
+
+```{r Import dos packages}
+library(summarytools)
+library(car)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(edgeR)
+library(limma)
+```
+
+# **Datasets**
+
+## *Transferência e leitura dos datastes*
+
+Depois de importar as bibliotecas necessárias, começamos por **associar** os datasets presentes no repositório online [^3] a uma **variável**.
+
+[^3]: <https://github.com/lais-carvalho/Trabalho-pratico/tree/main/Dados>
+
+```{r Leitura dos ficheiros}
+
+RNA_cpm = read.table("data_mrna_seq_cpm.txt", header = T, sep = '\t')   
+
+data_patient = read.table("data_patient.txt", header = T, sep = '\t')
+
+data_sample = read_tsv("data_sample.txt", na = "", show_col_types = FALSE)
+
+data_mutations = read.table("data_mutations.txt", header = T, sep = '\t')
+
+```
+
+## *Pré-processamento dos dados* {.tabset}
+
+### RNA_cpm
+
+Os nossos dados de transcriptómica já se encontram normalizados através do método Trimmed Mean of M caling (TMM) que serve para corrigir diferenças sistemáticas na composição das bibliotecas de RNA entre amostras (sendo uma normalização do tamanho da biblioteca e não dos dados em si), ajudando a reduzir a variabilidade técnica entre amostras.
+Após esta normalização TMM, as contagens foram convertidos para CPM (Counts per million), uma medida comum em análise de expressão génica que normaliza as contagens tendo em consideração as diferenças na profundidade de sequenciação entre as amostras.
+
+Começámos por verificar alguns aspetos relativamente ao dataset para perceber que tipo de preparação/tratamento os dados necessitavam.
+
+```{r Verificar a estrutura dos dados}
+
+class(RNA_cpm)
+
+head(unlist(lapply(RNA_cpm,class)) )
+
+dim(RNA_cpm)
+
+head(colnames(RNA_cpm))
+
+head(rownames(RNA_cpm))
+
+```
+
+Com o código acima é possível perceber:
+
+-   **class(RNA_cpm)** -\> Classe do dataset, dataframe neste caso;
+
+-   **unlist(lapply(RNA_cpm,class))** -\> Classe de cada coluna do dataframe
+
+-   **dim(RNA_cpm)** -\> Dimensão do dataframe;
+
+-   **colnames(RNA_cpm)** e **head(rownames(RNA_cpm))** -\> Verificar se o nome dos genes se está associado às linhas, e o nome das amostras às colunas.
+
+Verificámos assim que o dataset é um **dataframe** com uma dimensão de 22843 linhas e 453 colunas. As linhas são referentes a genes (não estando onomes destes ainda associados a cada linha) enquanto que as colunas corresppondem às amostras. Dado que as duas primeiras colunas são referentes ao nome e ID dos genes, a dimensão do dataset está como esperado apresentando **22843 genes** e **452 amostras**.
+
+Quando tentámos associar o nome dos genes à coluna, reparámos que devido há existência de genes duplicados não o conseguimos fazer. Assim, procedemos à verificação destes duplicados. 
+
+```{r Remover duplicados}
+
+which(duplicated(RNA_cpm[,1]))
+
+RNA_cpm[which(duplicated(RNA_cpm[,1])),1]
+
+which(RNA_cpm == 'BTBD8', arr.ind = T)
+
+RNA_cpm[which(duplicated(RNA_cpm[,1])),1] = paste(RNA_cpm[which(duplicated(RNA_cpm[,1])),1], "_duplicado", sep = "")
+
+which(duplicated(RNA_cpm[,1]))
+      
+RNA_cpm[13532, 1]
+
+```
+
+O código utilizado serviu para:
+
+-   **(which(duplicated(RNA_cpm[,1])))** -\> Saber quantos genes têm o nome repetido (6 nomes duplicados neste caso);
+
+-   **RNA_cpm[which(duplicated(RNA_cpm[,1])),1]** -\> Obter o nome dos genes duplicados;
+
+-   **which(RNA_cpm == 'BTBD8', arr.ind = T)** -\> Confirmar se o nome está duplicado;
+
+Nesta fase, e através de verificação manual, percebemos que o nome é de facto igual, no entanto os valores associados são diferentes.
+
+Optamos então por adicionar "\_duplicado" para os distinguir.
+
+-   \*\*RNA_cpm[which(duplicated(RNA_cpm[,1])),1] = paste(RNA_cpm[which(duplicated(RNA_cpm[,1])),1], "\_duplicado", sep = "")\*\* -\> Adiciona o "duplicado";
+
+-   **which(duplicated(RNA_cpm[,1]))** -\> Retorna as posições das linhas duplicadas da primeira coluna;
+
+-   **RNA_cpm[13532, 1]** -\> Retorna o valor na linha 13532 e coluna 1.
+
+Assim, já é possível associar o nome dos genes às linhas, corretamente:
+
+```{r Associar os nomes}
+
+rownames(RNA_cpm) = RNA_cpm[, 1]
+
+head(rownames(RNA_cpm))
+
+```
+
+-   **rownames(RNA_cpm) = RNA_cpm[, 1]** -\> Transformar os valores da primeira coluna, no nome das linhas;
+
+-   **head(rownames(RNA_cpm))** -\> para Verificar se não ocorreu nenhum erro no comando anterior e que o nome dos genes está associado às linhas;
+
+De seguida, continuamos com o pré-processamento dos dados, verificando se existem valores omissos.
+
+```{r Valores Omissos}
+any(is.na(RNA_cpm))
+
+RNA_cpm$Entrez_Gene_Id <- NULL
+
+any(is.na(RNA_cpm))
+
+```
+
+-   **any(is.na(RNA_cpm))** -\> Ver se há missing values
+
+-   **RNA_cpm\$Entrez_Gene_Id \<- NULL** -\> Eliminar a coluna com missing values
+
+-   **any(is.na(RNA_cpm))** -\> Verificar outra vez se há missing values
+
+Os valores omissos que existiam no dataframe estavam todos presentes na mesma coluna ('Entrez_Gene_Id"), por isso depois da sua eliminação, já não existem NAs.
+
+Por último, decidimos verificar se existem genes com uma frequência de expressão zero, em acima de 90% das amostras:
+
+```{r Retirar genes com expressão 0 frequente}
+
+#verificar_zero_frequente <- function(RNA_cpm) {genes_zero_frequente <- character(0)
+#  total_amostras <- ncol(RNA_cpm) - 1 
+#  for (i in 1:nrow(RNA_cpm)) {
+#    proporcao_zero <- sum(RNA_cpm[i, -1] == 0) / total_amostras
+#    if (proporcao_zero > 0.9) {
+#      genes_zero_frequente <- c(genes_zero_frequente, RNA_cpm[i, 1])
+#    }
+#  }
+#  return(genes_zero_frequente)
+#}
+
+#verificar_zero_frequente(RNA_cpm)
+```
+
+-   **verificar_zero_frequente \<- function(RNA_cpm) {...}** -\> Definir uma função;
+
+-   **genes_zero_frequente \<- character(0)** -\> Inicia um vetor vazio para armazenar o nome dos genes;
+
+-   **total_amostras \<- ncol(RNA_cpm) - 1** -\> Calcula o número total de amostras, com exceção da primeira coluna que corresponde ao nome dos genes;
+
+-   **for (i in 1:nrow(RNA_cpm))** -\> Inicia um loop sobre cada linha;
+
+-   **proporcao_zero \<- sum(RNA_cpm[i, -1] == 0) / total_amostras** -\> Calcula a proporção de valores 0 em cada linha, excluindo a primeira coluna;
+
+-   **if (proporcao_zero \> 0.9)** -\> Verifica se a proporção dos valores é maior que 90%
+
+-   **genes_zero_frequente \<- c(genes_zero_frequente, RNA_cpm[i, 1])** -\> Caso a condição anterior seja verdadeira, o nome do gene é adicionado ao vetor;
+
+-   **return(genes_zero_frequente)** -\> Retorna o vetor contendo o nome dos genes com expressão 0 maior que 90%.
+
+É possível observar que o código retorna o vetor vazio, o que significa que nenhum gene possui uma frequência de zeros superior a 90% em relação ao número total de amostras.
+
+
+### Metadados {.tabset}
+
+#### data_sample
+
+Começámos por verificar alguns aspetos relativos ao dataset:
+
+```{r Formato do dataset}
+class(data_sample) 
+
+data_sample = as.data.frame(data_sample)
+
+class(data_sample)
+
+data_sample = data_sample[-c(1:3),]
+
+colnames(data_sample) = data_sample[1,]
+
+data_sample = data_sample[-1,]
+
+str(data_sample)
+
+```
+
+-   **class(data_sample)** -\> Retorna a classe do dataset;
+
+-   **data_sample = as.data.frame(data_sample)** -\> Converte o dataset todo num dataframe;
+
+-   **str(data_sample)** -\> Fornece uma descrição sobre a estrutura do dataframe.
+
+Havia vários formatos neste dataset, então decidimos estabelecer tudo como dataframe. Verificamos também que a classe de todas as colunas correspondem a um "character", algo que teremos em atenção mais à frente.
+
+Depois de retirarmos as 4 primeiras linhas que não continham informações de metadados, podemos ver a dimensão do dataframe:
+
+```{r Dimensão do dataframe}
+
+dim(data_sample)
+
+```
+
+-   **dim(data_sample)** -\> Retorna um vetor com o número de linhas e o número de colunas no datafrmae;
+
+O dataframe possui **672** linhas correspondentes a **amostras**, como era esperado, e **75** colunas correspondentes a **variáveis**.
+
+
+Associámos também cada linha ao ID de uma amostra:
+
+```{r Associar as linhas}
+data_sample$SAMPLE_ID = gsub("-", ".", data_sample$SAMPLE_ID) 
+
+row.names(data_sample) = data_sample$SAMPLE_ID
+
+head(row.names(data_sample))
+
+```
+
+-   **row.names(data_sample) = data_sample$SAMPLE_ID** -\> Associa os IDs das amostras com o nome das linhas do dataframe;
+
+-   **row.names(data_sample)** -\> Imprime o nome das linhas do dataframe;
+
+-   **row.names(data_sample) = gsub("-", ".", row.names(data_sample))** -\> Substitui todos os hifens nas linhas por pontos;
+
+-   **data_sample = data_sample[,-2]** -\> Remove a segunda coluna do dataframe.
+
+
+Para além de fazermos a associação, removemos ainda a segunda coluna do dataframe e ainda substituimos os hifens das linhas por pontos, de forma a padronizar a formatação dos nomes das linhas.
+
+Depois, verificamos se existem duplicados no ID dos pacientes e no ID das amostras:
+
+```{r Verificar duplicados}
+
+any(duplicated(data_sample$PATIENT_ID))
+
+any(duplicated(data_sample$SAMPLE_ID))
+
+```
+
+-   **any(duplicated(data_sample$PATIENT_ID))** -\> Verifica se existe algum valor duplicado na coluna "PATIENT_ID";
+
+-   **any(duplicated(data_sample$SAMPLE_ID))** -\> Verifica se existe algum valor duplicado na coluna "SAMPLE_ID".
+
+Percebemos que existem IDs dos pacientes duplicados, o que demonstra que várias amostras podem ter sido retiradas do mesmo paciente.
+
+Além disso, não existem amostras duplicadas, tal como era previsto.
+
+```{r Fatores}
+fatores_sample_data = c(3:25, 27:29, 46, 49, 52, 54, 57:69, 71:74)
+for (coluna in fatores_sample_data) {
+  data_sample[[coluna]] = as.factor(data_sample[[coluna]])
+}
+
+colunas_numericas_sample_data = c(26, 30:45, 47, 48, 50, 51, 53, 55, 56, 70, 75)
+for (coluna in colunas_numericas_sample_data) {
+  data_sample[[coluna]] = as.numeric(data_sample[[coluna]])
+}
+
+unlist(lapply(data_sample,class))
+```
+
+Nem todas as amostras foram utilizadas para o processo de análise de RNAseq. Existem dois campos nos metadados: RNA sequenced e RNA seq analysis.
+
+Através da tabela de dados de RNA-seq, sabemos que 451 amostras foram analisadas.
+
+
+```{r Filtração dos dados}
+
+fraqRNAseq = table(data_sample$RNA_SEQ_ANALYSIS)
+
+pie(fraqRNAseq, main = "RNA-Seq analysis?")
+
+```
+
+-   **table(data_sample$RNA_SEQ_ANALYSIS)** -\> Conta a frequência de cada categoria presente na coluna "RNA_SEQ_ANALYSIS";
+
+-   **pie(table(data_sample$RNA_SEQ_ANALYSIS), main = "RNA-Seq analysis?")** -\> Cria um pie chart que mostra a distribuição dos valores da coluna;
+
+```{r}
+sample_data_rna = data_sample[data_sample$RNA_SEQ_ANALYSIS == 'Yes',]
+
+dim(sample_data_rna)
+
+sum(row.names(sample_data_rna) %in% colnames(RNA_cpm))
+```
+
+-   **sample_data_rna = data_sample[data_sample$RNA_SEQ_ANALYSIS == 'Yes',]** -\> Filtra o dataframe para icluir apenas os valores que correspondem a "YES";
+
+-   **sum(row.names(sample_data_rna) %in% colnames(RNA_cpm))** -\> Calcula o número de linhas em "sample_data_rna" que estão presentes nas colunas do "RNA_cpm".
+
+O código em cima serviu como filtro para perceber que dados de RNA-seq utilizar nas análises posteriores, garantindo que coincidem com os dados do dataset "RNA_cpm".
+
+#### data_patient
+
+Começámos por verificar alguns aspetos relativos ao dataset:
+
+```{r Classes de data_patient}
+
+class(data_patient)
+
+dim(data_patient)
+
+unlist(lapply(data_patient,class))
+
+head(row.names(data_patient))
+
+row.names(data_patient) <- data_patient$PATIENT_ID
+
+head(row.names(data_patient))
+
+```
+
+-   **unlist(lapply(data_patient,class)))** -\> Aplica a função class a cada coluna do dataframe usando lapply, em seguida, unlist é usada para converter a lista resultante num vetor;
+
+-   **row.names(data_patient) <- data_patient$PATIENT_ID** -\> Associa os IDs dos pacientes como os nomes das linhas do dataframe;
+
+-   **data_patient <- data_patient[,-1]** -\> Seleciona todas as linhas do dataframe, com exceção da primeira.
+
+O dataset corresponde a um dataframe com 562 amostras e 22 variáveis. As colunas possuem três tipos de estrutura de dados ("character", "integer" e "numeric"), mas iremos transformar em fatores as variáveis não numéricas.
+
+```{r Fatores}
+fatores_patient = c(3, 2, 5:19, 21:22)
+for (coluna in fatores_patient) {
+  data_patient[[coluna]] = as.factor(data_patient[[coluna]])
+}
+
+colunas_numericas_patient = c(4,20)
+for (coluna in colunas_numericas_patient) {
+  data_patient[[coluna]] = as.numeric(data_patient[[coluna]])
+}
+
+unlist(lapply(data_patient,class))
+```
+
+ 
+Depois vamos ver se exitem NAs.
+
+```{r Verificação de NAs}
+
+sum(is.na(data_patient))
+
+```
+
+-   **sum(is.na(data_patient))** -\> Calcula a soma de todos os NAs.
+
+
+Existem 71 NAs, mas em metadados é normal e por isso iremos mantê-los por agora.
+
+Por fim, realizamos a criação de um subset, tal como fizemos com os metadados anteriores, para garantir um dataframe com dados de pacientes presentes em "sample_data_rna", garantindo assim uma análise aos pacientes para os quais possuimos dados relevantes.
+
+```{r Filtração dos dados p}
+patient_data_rna <- data_patient %>% filter(row.names(data_patient) %in% sample_data_rna$PATIENT_ID)
+```
+
+-   **patient_data_rna = data_patient %>% filter(data_patient$PATIENT_ID %in% sample_data_rna$PATIENT_ID)** -\> Cria um novo dataframe ("patient_data_rna") filtrando o dataframe ("data_patient") com base nos IDs dos pacientes presentes no dataframe.
+
+### data_mutations
+
+Começámos por verificar alguns aspetos relativos ao dataset:
+
+```{r Classes de data_mutations}
+
+class(data_mutations) 
+
+dim(data_mutations)
+
+unlist(lapply(data_mutations,class))
+
+head(row.names(data_mutations))
+
+row.names(data_mutations) = make.unique(data_mutations$Hugo_Symbol) 
+
+head(row.names(data_mutations))
+
+sum(is.na(data_mutations))
+
+```
+
+-   **unlist(lapply(data_mutations,class))** -\> Aplica a função class a cada coluna do dataframe;
+
+
+-   **row.names(data_mutations) = make.unique(data_mutations$Hugo_Symbol) ** -\> Associa os dados presentes na coluna "Hugo_Symbol" com os nomes das linhas nos dataframes, e para evitar duplicados, adiciona um sufixo.
+
+
+É possível ver que temos um dataframe com 9910 linhas e 64 colunas. 
+No dataframe existem também um número bastante elevados de NAs, 155469.
+
+De seguida, vamos verificar a estrutura interna dos dados de cada coluna:
+
+```{r Preparação dos dados}
+
+unlist(lapply(data_mutations,class))
+
+colunas_fator_mut <- c(1, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,29,30,31,32, 33, 45, 47, 48, 51, 57, 60, 64)
+
+colunas_numericas_mut <- c(34,35,36,37,43, 54, 58, 63)
+
+colunas_char_mut <- c(2,6,7)
+
+data_mutations[, colunas_fator_mut]<- lapply(data_mutations[, colunas_fator_mut], as.factor)
+
+data_mutations[, colunas_numericas_mut]<- lapply(data_mutations[, colunas_numericas_mut], as.numeric)
+
+data_mutations[, colunas_char_mut]<- lapply(data_mutations[, colunas_char_mut], as.character)
+```
+
+-   **colunas_fator <- c(1, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,29,30,31,32, 33, 45, 47, 48, 51, 57, 60, 64)** -\> Cria um vetor com colunas para as transformar em fatores;
+
+-   **colunas_numericas <- c(34,35,36,37,43, 54, 58, 63)** -\> Cria um vetor com colunas para as transformar em valores numéricos;
+
+-   **colunas_char <- c(2,6,7)** -\> Cria um vetor com colunas para as transformar em caracteres;
+
+-   **data_mutations[, colunas_fator]<- lapply(data_mutations[, colunas_fator], as.factor)** -\> Transforma as colunas selecionadas anteriormente em fatores;
+
+-   **data_mutations[, colunas_numericas]<- lapply(data_mutations[, colunas_numericas], as.numeric)** -\> Transforma as colunas selecionadas anteriormente em numéricos;
+
+-   **data_mutations[, colunas_char]<- lapply(data_mutations[, colunas_char], as.character)** -\>Transforma as colunas selecionadas anteriormente em caracteres;
+
+
+Ao analisar a estrutura de dados de cada coluna, percebemos que era necessário transformar alguns dos dados para facilitar a sua manipulação:
+
+- os valores das colunas presentes no vetor associado a "colunas_fator" foram transformadas em fatores;
+
+- os valores das colunas presentes no vetor associado a "colunas_numericas" foram transformados em valores numéricos;
+
+- os valores das colunas presentes no vetor associado a "colunas_char" foram transformados em caracteres. 
+
+Por fim, procedemos à criação de um subset que contém apenas as linhas de "data_mutations" correspondentes às mutações que estão presentes nos dados de "RNA_cpm" para restringir a análise apenas às mutações para as quais temos dados de expressão gênica.
+
+```{r Filtragem dos dados m}
+
+mutations_subset = data_mutations %>% filter(data_mutations$Hugo_Symbol %in% RNA_cpm$Hugo_Symbol)
+head(mutations_subset)
+```
+
+# **Sumarização dos dados**
+
+Criação de dataframe com todos os metadados tendo em conta o ID dos Pacientes associados a cada amostra que tiveram o RNA sequenciado para facilitar o tratamento de metadados.
+
+```{r}
+metadados = merge(sample_data_rna, patient_data_rna, by='PATIENT_ID', all=T)
+
+dim(metadados)
+```
+Vamos retirar dos metadados as variáveis que não vamos usar na análise, deixando apenas no dataframe as variáveis de interesse.
+```{r}
+colnames(metadados)
+```
+
+```{r}
+row.names(metadados) = metadados$SAMPLE_ID
+
+variaveis_interessantes = c(1:4, 6, 8:10, 19, 28, 29, 52, 70, 73, 76:78, 90:95)
+
+metadados = metadados[, variaveis_interessantes]
+
+```
+
+
+```{r Sumariazação metadados}
+print(dfSummary(metadados, style = 'grid', graph.magnif = 1, valid.col = FALSE,
+                max.distinct.values = 5, col.widths = c(100, 200, 200, 350, 500, 250),
+                dfSummary.silent  = TRUE, headings = FALSE, justify = 'l')
+      , method = 'render', max.tbl.height = 500)
+
+```
+
+## *mutations_subset*
+
+```{r}
+colunas_relevantes = c("Chromosome", "Start_Position", "End_Position", "Strand", "Variant_Classification", "Variant_Type", "Tumor_Seq_Allele1", "Tumor_Seq_Allele2", "Validation_Status", "Mutation_Status", "impact", "n_vaf")
+
+relev_data_mutations = mutations_subset[, colunas_relevantes]
+```
+
+```{r Sumarização mutations_subset}
+
+print(dfSummary(relev_data_mutations, style = 'grid', graph.magnif = 1, valid.col = FALSE,
+                max.distinct.values = 5, col.widths = c(100, 200, 200, 350, 500, 250),
+                dfSummary.silent  = TRUE, headings = FALSE, justify = 'l')
+      , method = 'render', max.tbl.height = 500)
+
+```
+
+# **Análise exploratória**
+
+Considerando variáveis relevantes:
+
+```{r}
+
+boxplot(AGE_AT_DIAGNOSIS ~ OS_STATUS, data = metadados, main = "Idade aquando do diagnostico vs Estado", xlab = "Estado", ylab = "Idade (anos)", col = c("lightblue", "lightgreen", "grey"), names = c("Unknown", "0:LIVING", "1:DECEASED"))
+
+```
+
+O código em cima cria um boxplot que compara as distribuições das idades aquando do diagnóstico entre os diferentes estados de sobrevida. É possível observar que a idade com que foram diagnosticados não parece ter uma influência ou associação significativa com a sobrevivência do paciente, embora a idade aquando do diagnóstico seja menor nos pacientes que ainda estão vivos, o que pode ter a ver com o facto da rapidez de diagnóstico estar normalmente associada a uma maior taxa de sobrevivência.
+
+De seguida, decidimos averiguar a distribuição das etnias:
+
+```{r Distibuição de etnias}
+
+valores = table(metadados$ETHNICITY)
+
+nome = c("AdmixedAsian", "AdmixedBlack", "AdmixedWhite", "Asian", "Black", "HispNative", "White")
+
+pie(valores, labels = rep("", length(valores)), col = c("black",3,4,5,6,7,2), main = "Etinias") 
+legend("right", legend = nome, bty = "n", cex = 0.8, fill = c("black",3,4,5,6,7,2))
+```
+
+Verificámos que as etnias mais representadas neste dataset são "White", "Hispanic Native", "Black" e "Asian" respetivamente.
+
+De seguida, procedemos à comparação da idade de diagnóstico entre os géneros
+
+```{r Idade de Diagnóstico}
+
+boxplot(AGE_AT_DIAGNOSIS ~ SEX, data = metadados, main = "Idade do diagnostico vs gênero", xlab = "Gênero", ylab = "Idade em anos", col = c(2,'lightblue'))
+
+```
+
+No boxplot é possível observar que a idade dos pacientes masculinos, é ligeiramente mais elevada, possuindo limites, quartis e mediana com idades superiores comparativamente aos pacientes femininos. Verifica-se também uma maior presença de outliers nos dados dos pacientes masculinos comparativamente aos femininos.
+
+Finalmente, fizemos uma análise sobre o diagnóstico mais recorrente que revelou ser 'Acute Myeloid Leukaemia (AML) and Related Precursor Neoplasms'.
+
+```{r Diag mais recorrente data_patient}
+
+d = table(metadados$DIAGNOSIS)
+
+d = as.data.frame(d)
+
+indice_maximo <- which.max(d$Freq)
+
+nome_maximo <- d$Var1[indice_maximo]
+
+nome_maximo
+
+```
+
+## *sample_data_rna*
+
+```{r}
+
+pie(table(metadados$SAMPLE_SITE), main = "Local de recolha das amostras")
+
+```
+
+O gráfico demonstra como as amostras estão distribuídas pelos locais de recolha. Os locais de recolha de amostra mais frequentes entre os dados analisados são o "Aspirado de Medula Óssea" com pouco mais de 50% das amostras, o "Sangue Periférico" com uma distribuição pouco menor do que 50% das amostras, e a "Leucaferese" com opção menos utilizada. 
+
+Por último verificamos qual o nome do grupo de diagnóstico mais frequente nos dados
+
+```{r Diag mais recorrente data_sample}
+
+x = table(metadados$GROUP)
+
+x = as.data.frame(x)
+
+indice_maximo <- which.max(x$Freq)
+
+nome_maximo <- x$Var1[indice_maximo]
+
+nome_maximo
+
+```
+
+
+
+## *mutations_subset*
+
+```{r}
+
+barplot(table(relev_data_mutations$Chromosome), main = "Cromossomos", col = "4")
+
+pie(table(relev_data_mutations$Variant_Type), main = "Tipo de variação")
+
+```
+
+Com o código em cima, geramos um gráfico de barras que mostra a contagem de ocorrências de cada cromossoma, e um gráfico de pizza para perceber a distribuição dos tipos de variantes no dataframe. 
+
+É possível observar que a variante mais frequente no dataframe é a "SNP", seguida da "INS" e da "DEL".
+
+Depois, verificamos qual a mutação mais comum no Alelo 1 entre as amostras analisadas
+
+```{r Mutação mais comum 1}
+
+mut = table(relev_data_mutations$Tumor_Seq_Allele1)
+
+mut = as.data.frame(mut)
+
+indice_maximo <- which.max(mut$Freq)
+
+nome_maximo <- mut$Var1[indice_maximo]
+
+nome_maximo
+
+```
+
+A mutação mais comum referente ao Alelo 1, é a alteração por Citosinas. Este dado pode ser útil na identificação de uma doença ou de um potêncial alvo terapêutico.
+
+
+Analisamos ainda qual a mutação mais comum no Alelo 2 entre as amostras analisadas:
+
+```{r Mutação mais comum 2}
+
+mut2 = table(relev_data_mutations$Tumor_Seq_Allele2)
+
+mut2 = as.data.frame(mut2)
+
+indice_maximo <- which.max(mut2$Freq)
+
+nome_maximo <- mut2$Var1[indice_maximo]
+
+nome_maximo # A mutação mais comum é a alteração por T
+
+```
+
+Já no Alelo 2, a mutação mais comum é a alteração por Timina.
+
+
+# **Análise Univariada**
+
+## *Análise com as variáveis do metadado dos pacientes*
+
+As variáveis analisadas foram: Idade e sexo dos pacientes, teve como objectivo de determinar se os dois grupos de sexo ("Male" e "Female") deferiam quanto as idades. Para fazer esta análise, foi avaliado se os dois diferentes grupos apresentam médias diferentes. 
+
+```{r, warning=FALSE}
+table(metadados$SEX) # Confirmação de quantos grupos de sexos há.
+
+# Testar a homogeneidade das variâncias
+leveneTest(metadados$AGE_AT_DIAGNOSIS~metadados$SEX) # Não rejeitar a hipótese de que as variâncias dos grupos são iguais. 
+
+# Testar a normalidade dos diferentes grupos
+teste_normalidade_masculino=shapiro.test(metadados$AGE_AT_DIAGNOSIS[metadados$SEX == "Male"])
+teste_normalidade_feminino=shapiro.test(metadados$AGE_AT_DIAGNOSIS[metadados$SEX == "Female"])
+print(teste_normalidade_masculino) # Não normal
+print(teste_normalidade_feminino) # Não normal
+
+# Visualização da normalidade com qqPlot
+qqPlot(metadados$AGE_AT_DIAGNOSIS[metadados$SEX == "Male"], main = "Q-Q Plot - Masculino", ylab = "Idade")
+qqPlot(metadados$AGE_AT_DIAGNOSIS[metadados$SEX == "Female"], main = "Q-Q Plot - Feminino", ylab = "Idade")
+```
+
+```{r}
+# Normalidade geral das idades
+shapiro.test(metadados$AGE_AT_DIAGNOSIS) # Não normal
+
+# Retirada dos NAs:
+idades_sem_na <- na.omit(metadados$AGE_AT_DIAGNOSIS)
+
+# Criar gráfico de densidade sem valores ausentes
+ggdensity(idades_sem_na,
+          main = "Gráfico de densidade para a idade dos pacientes",
+          xlab = "Idade dos pacientes")
+```
+
+Não pode rejeitar a hipótese nula, nesse caso que as variâncias são homogéneas, e com os gráficos qqPlot e as análises de normalidade, foi possível determinar que as distribuições não são normais, mas considerando um tamanho elevado das amostras, realizamos um t-test e analisar relação entre sexo e idade. 
+
+```{r, warning=FALSE}
+# T-test
+t.test(metadados$AGE_AT_DIAGNOSIS ~ metadados$SEX, na.rm = TRUE)
+```
+
+Com base na análise final, é possível concluir que as idades diferem para os grupos "Male" e "Female". Isso implicaria que deve levar em consideração em análises de expressão com diferentes sexos que determinadas diferenças podem ser decorrentes da idade.
+
+## *Análise de varáveis no metadado de mutações*
+
+- "n_vaf" (Frequência do Alelo Variante Normalizado),é a frequência do alelo variante, sendo uma variável numérica.
+
+- Impact: variável que se refere ao efeito ou consequência que uma determinada mutação pode ter em um gene ou em uma função biológica específica. É uma variável nominal.
+
+O objectivo dessa comparação é determinar se a frequência do alelo variante defere para diferentes impactos que as mutações apresentam, podendo ser útil para identificar mutações driver (aquelas que contribuem para a progressão e desnvolvimento do câncer).
+
+```{r}
+# Avaliar a variável "N_vaf" quanto a presença de NAs e distribuição
+sum(is.na(relev_data_mutations$n_vaf))
+ggdensity(relev_data_mutations$n_vaf, main = "Distribuição da variável `n_vaf`")
+
+# Avaliação das diferentes classes de impacto
+table(relev_data_mutations$impact) # Há 3 classes: "High", "Moderate" e "Modifier"
+```
+
+```{r}
+# Avaliar a normalidade de n_vaf
+qqPlot(relev_data_mutations$n_vaf, ylab = "Frequência de mutções no alelo variente",  main = "qqPlot de VAF normalizado") # não é normal
+
+# Avaliar a homegneidade das variâncias
+leveneTest(relev_data_mutations$n_vaf~relev_data_mutations$impact) # as variâncias entre diferentes grupos de impacto não são homogéneas.  
+
+# Teste se as medianas são ou não igaus para os diferentes grupos
+res = kruskal.test(relev_data_mutations$n_vaf~relev_data_mutations$impact, data = relev_data_mutations)
+res # Não são estatisticamente diferentes
+```
+
+Com os resultados obtidos, não é possível rejeitar a hipótese nula que as medianas são iguais, nesse caso significa que não há variações significativas entre as frequências de mutações dos alelos variantes para diferentes grupos de impacto.
+
+## *Análise para variáveis do metadado das amostra*
+
+- "AGE_AT_PROCUREMENT" - Idade dos pacientes na aquisição das amostras.
+
+- "ELN_2017" - variável usada para classificar pacientes com leucemia mieloide aguda (LMA) em diferentes grupo de risco. 
+
+Esta análise tem como objectivo avaliar se a idade tem associação com diferentes grupos de risco.
+
+```{r,warning=FALSE}
+# Avaliação das variáveis
+table(metadados$ELN_2017) # Há 6 grupos de clssificações de risco
+summary(metadados$AGE_AT_PROCUREMENT) # Há um NA.
+
+# Criar o gráfico de dispersão 
+ggplot(metadados, aes(x = ELN_2017, y = AGE_AT_PROCUREMENT, color = ELN_2017)) +
+  geom_point(size = 3) +  
+  labs(x = "Classificação de Risco ELN 2017", y = "Idade na Aquisição", title = "Idade na Aquisição vs. Classificação de Risco ELN 2017") +  
+  theme_minimal() +  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+# Analisando a normalidade e homogeneidade das variâncias:
+
+qqPlot(metadados$AGE_AT_PROCUREMENT, ylab = "idade", main = "Distribuição das idades dos pacientes na recolha das amostras")
+
+shapiro.test(metadados$AGE_AT_PROCUREMENT) # Não é normal
+
+# Análise da variância
+leveneTest(AGE_AT_PROCUREMENT ~ ELN_2017, data = metadados) # Homogénea
+
+# ANOVA
+anova_result <- aov(AGE_AT_PROCUREMENT ~ ELN_2017, data = metadados)
+summary(anova_result)
+
+## Análise por grupo:
+tukey_result <- TukeyHSD(anova_result)
+print(tukey_result)
+```
+
+Considerando um elevado tamanho da amostra, a análise ANOVA foi feita, mesmo sabendo que a variável "AGE_AT_PROCUREMENT" não segue a distribuição normal. É possível concluir que a idade dos pacientes interferiu, nesta situação, na determinação de dois grupos de risco: "Favoravel" e "Adverse". Para futuras análise é importante levar em conta essa possível associação entre a idade e os dois grupos de risco referidos.
+
+# **Expressão diferencial**
+
+## Genes diferencialmente expressos entre Homens e Mulheres
+
+Dado que os nossos dados já sofreram uma normalização TMM e são valores CPM, um pré-processamento equivalente à função <cpm(calcNormFactors(y))> (onde y seria o objeto DGElist que teria as raw counts) normalmente utilizada aquando da análise de expressão diferencial com o package limma.Por isso, iremos fazer uma transformação logaritmica para finalizar o processo de normalização dos dados normalmente feito antes da análise da expressão génica diferencial com o limma.
+
+
+Dado que os nossos dados já sofreram uma normalização TMM e são valores CPM, um pré-processamento equivalente à função <cpm(calcNormFactors(y))> (onde y seria o objeto DGElist que teria as raw counts) normalmente utilizada aquando da análise de expressão diferencial com o package limma.Por isso, filtramos os genes para que apenas aqueles que tenham pelo menos metade dos pacientes com CPM superior a 1 fossem analisados e depois fizémos uma transformação logaritmica para finalizar o processo de normalização dos dados que é normalmente feito antes da análise da expressão génica diferencial com o limma (pipeline limma-trend)
+
+```{r preparação dos dados para DE - filtragem}
+selected_genes = rowMeans(RNA_cpm[,-1] > 1) > 0.5
+RNA_cpm_filtered = RNA_cpm[selected_genes, ]
+RNA_cpm_filtered = RNA_cpm_filtered[, -1]
+head(RNA_cpm_filtered)
+```
+Depois da filtragem, ficámos com 14405 genes para a análise de expressão diferencial.
+
+```{r Definição do design experimental}
+Sexo = metadados$SEX
+table(Sexo)
+design = model.matrix(~0+Sexo, data = RNA_cpm_filtered)
+colnames(design) = levels(Sexo)
+row.names(design) = colnames(RNA_cpm_filtered)
+head(design)
+```
+
+```{r Análise de expressão diferencial}
+logCPM = log2(RNA_cpm_filtered + 1)
+contrast = makeContrasts(Female - Male, levels = design)
+fit_log = lmFit(logCPM, design)
+fit_log = contrasts.fit(fit_log, contrast)
+fit_log = eBayes(fit_log, trend=T)
+
+topTable(fit = fit_log, genelist = row.names(logCPM))
+
+summa.fit_log = decideTests(fit_log)
+summary(summa.fit_log)
+
+## Opções para a DE:
+dge.estDisp.out <- estimateDisp(dge, design)
+fit <- glmFit(dge.estDisp.out, design)
+lrt <- glmLRT(fit, coef = 2)
+
+```
+```{r}
+plotMD(fit_log)
+```
+
+
+Não há genes diferencialmente expressos entre os sexos.
+
+
+```{r DE de acordo com o tipo de amostra}
+#Outra variável (tipo de amostra)
+subset_sample$SAMPLE_SITE = as.factor(subset_sample$SAMPLE_SITE)
+levels(subset_sample$SAMPLE_SITE) = make.names(levels(subset_sample$SAMPLE_SITE))
+
+y <- DGEList(counts = RNA_cpm, genes = row.names(RNA_cpm), group = subset_sample$SAMPLE_SITE)
+
+design2 = model.matrix(~0+subset_sample$SAMPLE_SITE, data = y$samples)
+colnames(design2) = levels(subset_sample$SAMPLE_SITE)
+head(design2)
+```
+
+```{r}
+contrast2 = makeContrasts( Bone_Leuk = Bone.Marrow.Aspirate - Leukapheresis, 
+                           Bone_Blood = Bone.Marrow.Aspirate - Peripheral.Blood,
+                           Leuk_Blood = Leukapheresis - Peripheral.Blood, levels=design2)
+keep <- filterByExpr(y, design2)
+y <- y[keep, , keep.lib.sizes=FALSE]
+
+v <- voom(y,design2)
+
+fit2 <- lmFit(v, design2)
+
+fit2 <- contrasts.fit(fit2, contrast2)
+
+fit2 <- eBayes(fit2, trend = F, robust = F)
+
+summa.fit2 <- decideTests(fit2)
+
+summary(summa.fit2)
+```
+```{r}
+plotMD(fit2,coef="Leuk_Blood",status=summa.fit2[,"Leuk_Blood"], values = c(-1, 1), hl.col=c("blue","red"), main = "Leukapheresis vs Periphal Blood")
+plotMD(fit2,coef="Bone_Leuk",status=summa.fit2[,"Bone_Leuk"], values = c(-1, 1), hl.col=c("blue","red"), main = "Leukapheresis vs Bone Marrow")
+```
+
+```{r}
+volcanoplot(fit2,coef="Leuk_Blood",highlight=19,names=row.names(fit2), main ="Leukapheresis vs Periphal Blood")
+volcanoplot(fit2,coef="Bone_Leuk",highlight=11,names=row.names(fit2), main ="Leukapheresis vs Bone Marrow")
+```
+
+
+Para a expressão diferencial analisaram-se várias variáveis: sexo, tipo de amostra retirada, 
+Quanto ao sexo, não foram encontrados genes diferencialmente expressos, o que indica que o sexo não é um fator diferencial da expressão dos genes nas amostras destes pacientes.
+Na análise da expressão tendo em conta o tipo de amostra retirada (medula óssea, plasma do sangue periférico ou glóbulos brancos através de leucaférese (Leukapheresis), foram detetados alguns genes diferencialmente expressos entre as amostras. Na comparação entre glóbulos brancos e medula foram encontrados 8 genes subexpressos e 3 sobrexpressos, enquanto que para o contraste entre glóbulos vermelhos e soro foram encontrados 3 genes subexpressos e 16 sobrexpressos.No vulcano plot é ainda possível ver o nome dos genes diferencialmente expressos, sendo interessante destacar a presença dos mesmos genes na comparação dos genes diferencialmente expressos entre os glóbulos vermelhos e a medula ossea, e entre os glóbulos e o soro, sendo que os 3 genes subexpressos numa comparação são os 3 que estão sobrepxressos. Esta presença comum nas comparações sugere que a razão para a expressão diferencial destes 3 genes está nos globulos brancos, dado estarem nas duas comparações feitas. Adicionalmente, também é interessante destacar nesta análise a presença de genes associados à resposta imune (e.g. SIGLEC6 e ROBO4) e ao metabolismo celular (e.g. TMEM30B e PROSER1). 
+Numa próxima etapa, é necessário averiguar melhora ontologia destes genes e perceber em que é que vias e funções estão envolvidos.
+
+# *Redução da dimensionalidade*
+
+A análise não supervisionada será aplicada nos dados expressão genética filtrados para os genes que apenas tenham pelo menos metade dos pacientes com CPM superior a 1 fossem analisados, e normalizado (`logCPM`). 
+
+## Processamento dos dados: 
+```{r}
+# Preparação dos dados: 
+DADOS = t(logCPM) #Transpor os dados
+
+# União dos dados com metadados relevantes para análises:
+metadados_slect = metadados[,c(8, 21)] # Sleciona o SAMPLE_SITE e o OS_STATUS.
+merged_df <- merge(DADOS, metadados_slect, by = "row.names")
+row.names(merged_df) <- merged_df$Row.names
+merged_df = merged_df[, -1]
+
+
+# União com os outros metadados do sample_data_rna: "CUMULATIVE_TREATMENT_STAGE_COUNT" e "CUMULATIVE_TREATMENT_TYPE_COUNT": 
+metadados_counts = sample_data_rna[ , c("CUMULATIVE_TREATMENT_STAGE_COUNT", "CUMULATIVE_TREATMENT_TYPE_COUNT")]
+merged_df <- merge(merged_df, metadados_counts, by = "row.names")
+row.names(merged_df) <- merged_df$Row.names
+merged_df = merged_df[, -1]
+
+```
+
+## Determinação das métricas (PCA)
+
+```{r}
+# Formulação do PCA dos dados:
+dados_pca = merged_df[, -c(14406:14409)]
+pca_result <- prcomp(dados_pca, scale = F)
+
+summary(pca_result)
+pca_result$rotation
+pca_result$x
+
+biplot(pca_result)
+
+````
+
+
+
+```{r}
+#Visualizar a distribuição dos pontos no PC1 e o PC2:
+pca_data <- as.data.frame(pca_result$x[, 1:2])
+plot(pca_data$PC1, pca_data$PC2,
+     main = "Projeção nos Dois Primeiros Componentes Principais",
+     xlab = "PC1",
+     ylab = "PC2",
+     pch = 19,  
+     col = "blue") 
+
+# determinação de qunatos PCAs explicam 90% dos dados:
+prop_var <- summary(pca_result)$importance["Proportion of Variance",]
+cumulative_prop_var <- cumsum(prop_var)
+n_components_90 <- which(cumulative_prop_var >= 0.9)[1]
+n_components_90 
+```
+
+A análise dos dados a partir de PCA permitiu concluir que os primeiros 132 componentes principais explicam 90% da variabilidade dos dados, como esse número é consideravelmente inferior ao número inicial de genes (14405), é possível fazer uma redução da dimensão sem perder muita informação. Posteriormente, essa informação pode ser usada para seleccionar os genes que mais contribuem para a variabilidade dos dados de expressão e identificar os processos biológicos significativos.
+
+
+```{r}
+# Análise da qualidade das variáveis individuais nos dois primeiros componentes principais
+library(factoextra)
+fviz_famd_ind(pca_result, geom = c("point"), col.ind = "cos2", gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), palette = "rainbow", addEllipses = FALSE, ellipse.type = "confidence",ggtheme = theme_minimal(), repel = TRUE, labels = F)  
+
+````
+
+No gráfico `Individual-PCA` é possível observar a qualidade da representação ("cos2") das variáveis individuais nos dois primeiros componentes principais (que em conjunto explicam 28,1% da variabilidade dos dados), assim nota-se que as variáveis mais próximas de zero, apresentam uma variação menos explicada do que as mais distantes (coloração alaranjada). 
+
+### Análise de diferentes metadados e suas distribuições nos PCAs
+
+```{r}
+# Análise dos dados para diferentes metadados:
+library(ggfortify)
+library(scatterplot3d)
+# Sample_site:
+autoplot(pca_result, data = as.data.frame(merged_df), colour = 'SAMPLE_SITE', size = 2, main = "SAMPLE_SITE")
+
+# Plotegem de um gréfico com 3 dimensões
+pca_data <- pca_result$x[, 1:3]
+scatterplot3d(pca_data, color = as.integer(merged_df$SAMPLE_SITE), pch = 16,
+              xlab = "PC1", ylab = "PC2", zlab = "PC3", main = "Representação de 3 dimensões - SAMPLE_SITE")
+
+# "CUMULATIVE_TREATMENT_STAGE_COUNT"
+autoplot(pca_result, data = as.data.frame(merged_df), colour = "CUMULATIVE_TREATMENT_STAGE_COUNT", size = 2, main = "CUMULATIVE_TREATMENT_STAGE_COUNT")
+
+# "CUMULATIVE_TREATMENT_TYPE_COUNT"
+autoplot(pca_result, data = as.data.frame(merged_df), colour = "CUMULATIVE_TREATMENT_TYPE_COUNT", size = 2, main = "CUMULATIVE_TREATMENT_TYPE_COUNT")
+
+# "OS_STATUS"
+legenda_personalizada <- c("No inf" = "gray", "0:LIVING" = "red", "1:DECEASED" = "green")
+autoplot(pca_result, data = as.data.frame(merged_df_clean), colour = "OS_STATUS", size = 2, main = "OS_STATUS") +
+  scale_color_manual(values = legenda_personalizada) # Cinza são os NAs. 
+
+scatterplot3d(pca_data, color = as.integer(merged_df_clean$OS_STATUS), pch = 16,
+              xlab = "PC1", ylab = "PC2", zlab = "PC3", main = "Representação de 3 dimensões - OS_STATUS")
+
+````
+
+
+Com a observação dos diferentes PCAs que destacam diferentes categorias dos metadados, de forma a tentar visualizar melhor a separação entre os diferentes fatores, é possível determinar que há agrupamento notével ente os diferentes grupos das variáveis analisada: `Sample_site`, `CUMULATIVE_TREATMENT_STAGE_COUNT`, `CUMULATIVE_TREATMENT_TYPE_COUNT` e `OS_STATUS`. Entretanto, como a observação foi realizada apenas até o terceiro PCA (explicação conjunta de 34,5% dos dados), a variação entre grupos distintos de amostras não está completamente representada. 
+
+
