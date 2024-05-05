@@ -1136,4 +1136,148 @@ scatterplot3d(pca_data, color = as.integer(merged_df$OS_STATUS), pch = 16,
 ```
 Com a observação dos diferentes PCAs que destacam diferentes categorias dos metadados, de forma a tentar visualizar melhor a separação entre os diferentes fatores, é possível determinar que há agrupamento notável ente os diferentes grupos das variáveis analisada: `Sample_site`, `CUMULATIVE_TREATMENT_STAGE_COUNT`, `CUMULATIVE_TREATMENT_TYPE_COUNT` e `OS_STATUS`. Entretanto, como a observação foi realizada apenas até o terceiro PCA (explicação conjunta de 34,5% dos dados), a variação entre grupos distintos de amostras não está completamente representada. 
 
+# **Machine Learning**
+
+## **Preparação do modelo**
+
+Neste capitulo, primeiramente foi necessário proceder à instalação e importação de alguns packages
+
+```{r Instação e Importação de packages necessários para ML}
+
+install.packages("caret")
+
+install.packages("timeDate")
+
+install.packages("randomForest")
+
+library(caret)
+
+library(randomForest)
+
+library(party)
+
+library(e1071)
+
+```
+
+Relativamente à utilização do modelos de Machine Learning, vamos começar por verificar o impacto de algumas características no tempo de sobrevida dos pacientes analisados. 
+
+Então, iremos utilizar o dataset "merged_df", adicionando ainda algumas colunas de metadados que possam ter relevancia na análise!  
+
+```{r}
+
+# Definir a seed para caso se queira reproduzir estes resultados
+
+set.seed(9999)
+
+cvcontrol = trainControl( method = 'repeatedcv', number = 10, repeats = 5)
+
+merged_df$AGE_AT_DIAGNOSIS <- metadados[rownames(merged_df), "AGE_AT_DIAGNOSIS"]
+merged_df$CANCER_TYPE <- metadados[rownames(merged_df), "CANCER_TYPE"]
+merged_df$SEX <- metadados[rownames(merged_df), "SEX"]
+merged_df$ETHNICITY <- metadados[rownames(merged_df), "ETHNICITY"]
+
+
+ml_data = merged_df
+
+
+ml_data$sobrevida_paciente = as.factor(ml_data$OS_STATUS)
+
+
+```
+
+
+Após preparar os dados, fizemos a divisão dos entre dados para treinar o modelo (70%), e dados para o testar (30%).
+
+```{r Preparação do modelo}
+
+# Dividir os dados em conjuntos de treino e teste (70% treino, 30% teste)
+
+set.seed(9999)
+
+indices <- createDataPartition(ml_data$sobrevida_paciente, p = 0.7, list = FALSE)
+
+
+dados_treino <- ml_data[indices, ]
+
+
+dados_teste <- ml_data[-indices, ]
+
+```
+
+Agora, podemos passar à aplicação de diferentes modelos.
+
+
+### Árvore de decisão
+
+Primeiramente, procedemos ao treino do modelo  com os dados selecionados previamente. 
+
+```{r Árvores de Decisão}
+
+# Definir o modelo
+modelo_dt = ctree(sobrevida_paciente ~ ., data = dados_treino)
+
+# Visualizar o modelo
+print(modelo_dt)
+
+```
+
+Depois fizemos um plot da árvore de decisão relativa aos dados de teste. É possível observar que os valores omissos encontram-se também eles na árvore, no Node 4.
+
+```{r Árvores de Decisão_Plot}
+
+plot(modelo_dt)
+
+```
+
+Depois do treino, devemos avaliar a sua performance. Para isso, primeiramente é necessário testar o modelo!
+
+
+```{r - DT Teste}
+
+testDT = predict(modelo_dt, dados_teste)
+
+```
+
+Após o teste, criamos uma tabela comparando os resultados obtidos e os resultados esperados, e calculamos a precisão do modelo
+
+```{r DT - Avaliação do modelo}
+
+# Comparação dos resultados utilizando uma tabela
+
+table(testDT, dados_teste$sobrevida_paciente)
+
+
+# Calculo da precisão
+
+precisao_DT = mean(testDT == dados_teste$sobrevida_paciente)
+precisao_DT
+```
+
+É possível observar que com o modelo de Árvores de decisão, obteve-se uma precisão de 100% nos testes realizados. Esse valor não é comum e é um sinal de alerta, que pode significar algum tipo de problema. Esse problema pode ir desde o overfitting, quantidade pequena de dados, dados muito simples e com uma separação clara entre eles, o algoritmo utilizado pode ser inadequado ou os parâmetros podem estar mal ajustados.
+
+
+
+### Naive-Bayes
+
+Utilizando os dados de teste e dados de treino definidos anteriormente, realizou-se o treino e o teste do modelo Naive-Bayes.
+
+```{r Naive-Bayes}
+
+modelo_nb = naiveBayes(sobrevida_paciente ~ ., data = dados_treino)
+
+testeNB = predict(modelo_nb, dados_teste)
+
+```
+
+Após o teste, procedeu-se à análise dos seus resultados utilizando uma tabela e calculando a sua precisão.
+
+```{r NB - Avaliação}
+table(testeNB, dados_teste$sobrevida_paciente)
+
+precisao_NB = mean(testeNB == dados_teste$sobrevida_paciente)
+
+precisao_NB
+```
+Na tabela obtida, é possível verificar bastnates missmatches entre os valores previstos pelo modelo e os valores reais. Calculando a sua precisão, verificou-se uma precisão de 41%, bastante mais baixa que o modelo anterior, podendo significar uma aleatoriedade do modelo criado. Isso pode acontecer devido a um mau tratamento de dados, má escolha de classes, ou mau uso dos hiperparâmetros. De qualquer forma, também não é um resultado satisfatório para a previsão dos nossos dados.
 
