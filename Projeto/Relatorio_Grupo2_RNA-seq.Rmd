@@ -43,6 +43,7 @@ library(dplyr)
 library(ggplot2)
 library(gplots)
 library(ggpubr)
+library(genefilter)
 library(edgeR)
 library(limma)
 library(ggfortify)
@@ -947,50 +948,87 @@ Da mesma forma, alguns genes relacionados com o ciclo celular e resposta ao stre
 Em conjunto estes resultados sugerem que os tratamentos para a LMA podem afetar a expressão génica de várias maneiras, incluindo a regulação de genes envolvidos na resposta ao stress celular, na proliferação celular e na diferenciação celular. Adicionalmente, a alteração na expressão destes genes pode estar associada à resposta do paciente ao tratamento ou até indicar a eficácia do tratamento.
 
 # **Clustering de genes**
-## Heatmaps
+## Clustering Hieráriquico
 
-```{r Heatmap}
-sexo <- basal.vs.lp$ENTREZID[1:100]
-i <- which(v$genes$ENTREZID %in% basal.vs.lp.topgenes)
+```{r hierarquico}
+# Preparação dos dados: 
+DADOS = t(logCPM) #Transpor os dados
+metadados$SEX = as.factor(metadados$SEX)
+logCPM_metadados = cbind(DADOS, metadados)
+dim(logCPM_metadados)
 
-heatmap.2(logCPM[i,], scale="row", labRow=v$genes$SYMBOL[i], labCol=group, 
-   col= colorpanel(1000,"blue","white","red"), trace="none", density.info="none", 
-   margin=c(8,6), lhei=c(2,10), dendrogram="column")
+#Clustering
+logCPM_metadados.sc = scale(logCPM_metadados[,1:14405])
+dist.logCPM_metadados = dist(logCPM_metadados.sc, method = "manhattan")
+cl.logCPM_metadados = hclust(dist.logCPM_metadados, method = "average")
+my.plot.hc = function(hclust, lab = 1:length(hclust$order), lab.col = rep(1, length(hclust$order)), hang = 0.1, ...)
+  
+my.plot.hc(cl.logCPM_metadados, lab.col = as.integer(logCPM_metadados$SEX)+1, cex = 0.6)
+
+```
+
+```{r}
+logCPM_matrix <- as.matrix(logCPM)
+
+class(logCPM_matrix) <- 'numeric'
+max_logCPM_matrix <- apply(logCPM_matrix, 1, max)
+min_logCPM_matrix <- apply(logCPM_matrix, 1, min)
+vl <-max_logCPM_matrix/min_logCPM_matrix > 2
+logCPM_matrix <-logCPM_matrix[vl, ]
+logCPM_matrix <-na.exclude(logCPM_matrix)
+```
+
+```{r filtrar o top 50 de genes}
+expressao <- gsub("\\..*", "", rownames(logCPM_matrix))
+rownames(logCPM_matrix) <- expressao
+rownames(logCPM_matrix) <- make.names(rownames(logCPM_matrix), unique = TRUE)
+
+test <- rowttests(logCPM_matrix)
+ranking <- order(test$p.value)
+p_value <- ranking[1:50]
+genes_top50 = nova[p_value, ]
+```
+
+```{r matriz de distancias}
+distxy <- dist(genes_top50, method = 'euclidean')
+hc = hclust(distxy, method = 'complete')
+plot(hc)
+```
+
+```{r}
+hcd <- as.dendrogram(hc)
+nodePar <- list(lab.cex = 0.6, pch = c(NA,20), cex = 0.8, col = "blue")
+plot(hcd, ylab = "Height", nodePar = nodePar, horiz = TRUE, edgePar = list(col = 2:3, lwd = 2:1))
+```
+```{r}
+heatmap(genes_top50, labCol = sort(metadados$SEX))
 ```
 
 ```{r K-means}
-genes_sex <- row.names(summa.fit_sex)
-genes_sex_selecionados <- logCPM[genes_sex, ]
-genes_sex_selecionados <- as.matrix(genes_sex_selecionados)
+set.seed(123)
+logCPM_matrix <- logCPM_matrix[1:length(metadados$SEX)]
+centers <- cut(logCPM_matrix, breaks = 4)
+centers_factor <- factor(centers)
+sex_factor <- factor(metadados$SEX)
 
-kmeans_sex <- kmeans(genes_sex_selecionados, centers = 2) 
+levels(centers_factor) <- c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4")
 
-table(kmeans_sex$cluster)
-
-heatmap.2(genes_sex_selecionados, scale = "row", Rowv = T, Colv = NA, col = heat.colors(256), margins = c(5, 10), labRow = FALSE, main = "Heatmap dos Clusters dos Genes Diferencialmente Expressos entre Homens e Mulheres")
-
-```
-
-## Clustering Hierárquico
-
-```{r Clustering hierarquico}
-
+table <- table(centers_factor, sex_factor)
+print(table)
 ```
 
 ## Clustering não supervisionado - MDS plot
 
 ```{r MDS plot}
-par(mfrow=c(1,2))
-col.group <- group
-levels(col.group) <-  brewer.pal(nlevels(col.group), "Set1")
-col.group <- as.character(col.group)
-col.lane <- lane
-levels(col.lane) <-  brewer.pal(nlevels(col.lane), "Set2")
-col.lane <- as.character(col.lane)
-plotMDS(lcpm, labels=group, col=col.group)
-title(main="A. Sample groups")
-plotMDS(lcpm, labels=lane, col=col.lane, dim=c(3,4))
-title(main="B. Sequencing lanes")
+mds <- cmdscale(dist(logCPM))
+
+mds_df <- data.frame(X = mds[, 1], Y = mds[, 2], Sexo = sex_factor)
+
+library(ggplot2)
+ggplot(mds_df, aes(x = X, y = Y, color = Sexo)) +
+  geom_point() +
+  labs(title = "MDS Plot com Sexo") +
+  theme_minimal()
 ```
 
 
@@ -1000,9 +1038,6 @@ A análise não supervisionada será aplicada nos dados expressão genética fil
 
 ## Processamento dos dados: 
 ```{r}
-# Preparação dos dados: 
-DADOS = t(logCPM) #Transpor os dados
-
 # União dos dados com metadados relevantes para análises:
 metadados_select = metadados[,c(8, 30)] # Seleciona o SAMPLE_SITE e o OS_STATUS.
 merged_df <- merge(DADOS, metadados_select, by = "row.names")
