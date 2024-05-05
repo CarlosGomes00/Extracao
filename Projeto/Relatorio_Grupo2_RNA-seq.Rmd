@@ -30,10 +30,7 @@ O conjunto de dados selecionados para este trabalho foram retirados de um estudo
 
 [^2]: <https://www.cbioportal.org/study/summary?id=aml_ohsu_2018>
 
-Este trabalho tem como objetivo analisar os dados de expressão de pacientes com AML, comparando os seus dados transcriptómicos de acordo com o sexo e grupo dos pacientes, com vista a obter informações sobre genes diferencialmente expressos e enriquecidos, clusters de genes e/ou de amostras e que genes parecem ter maior importância no transcriptoma associado a AML.
-
-Para começar com a análise, primeiro procedemos à **instalação** de algumas bibliotecas.
-Depois da sua instalação, fizemos o seu **carregamento**.
+Este trabalho tem como objetivo analisar os dados de expressão de pacientes com AML, comparando os seus dados transcriptómicos de acordo com o sexo, tipo de amostra e tratamentos cumulativos dados aos pacientes, com vista a obter informações sobre genes possivelmente expressos diferencialmente e/ou enriquecidos, que tenham um papel importante no tratamento da doença e na sobrevivência dos pacientes.
 
 ```{r Import dos packages}
 library(summarytools)
@@ -49,7 +46,7 @@ library(limma)
 library(ggfortify)
 library(scatterplot3d)
 library(factoextra)
-
+library(MASS)
 ```
 
 # **Datasets**
@@ -751,6 +748,8 @@ Considerando um elevado tamanho da amostra, a análise ANOVA foi feita, mesmo sa
 
 # **Expressão diferencial**
 
+Após uma análise exploratória, concluimos que seria interessante tentar perceber se o sexo, tipo de amostras, o nº e fase dos tratamentos cumulativos e a sobrevivência dos pacientes estavam refletidos nos dados de expressão génica através da análise de expressão diferencial. 
+
 Dado que os nossos dados já sofreram uma normalização TMM e são valores CPM, um pré-processamento equivalente à função <cpm(calcNormFactors(y))> (onde y seria o objeto DGElist que teria as raw counts) normalmente utilizada aquando da análise de expressão diferencial com o package limma.Por isso, iremos fazer uma transformação logaritmica para finalizar o processo de normalização dos dados normalmente feito antes da análise da expressão génica diferencial com o limma.
 
 
@@ -947,15 +946,30 @@ Na análise da expressão tendo em conta o tipo de amostra retirada (medula óss
 Da mesma forma, alguns genes relacionados com o ciclo celular e resposta ao stress celular (e.g. DNAJC15 e TP73), manutenção da integridade e função celular (e.g. TIMP1, GDP2 e MICAL1) e regulação da expressão génica (e.g. GCFC2), foram encontrados diferencialmente expressos na comparação da fase mais avançada de tratamentos (fase 8) com os outros estados de tratamentos cumulativos e na comparação do nº de tratamentos cumulativos mais elevado com quantidades mais baixas de tratamentos a que os pacientes foram sujeitos. 
 Em conjunto estes resultados sugerem que os tratamentos para a LMA podem afetar a expressão génica de várias maneiras, incluindo a regulação de genes envolvidos na resposta ao stress celular, na proliferação celular e na diferenciação celular. Adicionalmente, a alteração na expressão destes genes pode estar associada à resposta do paciente ao tratamento ou até indicar a eficácia do tratamento.
 
-# **Clustering de genes**
-## Clustering Hieráriquico
+## Multi-Dimensional Scaling(MDS)
 
-```{r hierarquico}
+Com o objetivo de indentificar possíveis padrões ou agrupamentos nos dados de expressão diferencial que nos permitam de alguma forma perver características das amostras ou dos pacientes, especificamente a resposta deste ao tratamento, começamos por fazer Multi-Dimensional Scaling (MDS). MDS é uma representação visual e simplificada dos dados e da similaridade ou distância entre estes, permitindo assim a análise da relação entre os níveis de expressão. 
+
+```{r MDS plot}
+dist_euclidiana <- dist(logCPM)
+mds_result_isomds <- isoMDS(dist_euclidiana)
+
+plot(mds_result_isomds$points, main = "Multi-Dimensional Scaling(MDS)")
+```
+
+A análise do MDS plot revelou possíveis padrões ou agrupamentos dos níveis de expressão génica, o que nos levou a tentar encontrar este agrupamento (cluster) através de análises não supervisionadas como o clustering hierárquico ou k-means.
+
+# **Clustering de genes**
+
+Dada a expressão diferencial analisada anteriormente e os resultados obtidos num artigo anterior[^1], optámos por verificar se há a formação de clusteres associados ao sexo e à sobrevivência dos paicentes.
+
+## Clustering de genes de acordo com o sexo dos pacientes
+
+```{r hierarquico - sexo}
 # Preparação dos dados: 
 DADOS = t(logCPM) #Transpor os dados
 metadados$SEX = as.factor(metadados$SEX)
 logCPM_metadados = cbind(DADOS, metadados)
-dim(logCPM_metadados)
 
 #Clustering
 logCPM_metadados.sc = scale(logCPM_metadados[,1:14405])
@@ -964,7 +978,6 @@ cl.logCPM_metadados = hclust(dist.logCPM_metadados, method = "average")
 my.plot.hc = function(hclust, lab = 1:length(hclust$order), lab.col = rep(1, length(hclust$order)), hang = 0.1, ...)
   
 my.plot.hc(cl.logCPM_metadados, lab.col = as.integer(logCPM_metadados$SEX)+1, cex = 0.6)
-
 ```
 
 ```{r}
@@ -986,7 +999,7 @@ rownames(logCPM_matrix) <- make.names(rownames(logCPM_matrix), unique = TRUE)
 test <- rowttests(logCPM_matrix)
 ranking <- order(test$p.value)
 p_value <- ranking[1:50]
-genes_top50 = nova[p_value, ]
+genes_top50 = logCPM_matrix[p_value, ]
 ```
 
 ```{r matriz de distancias}
@@ -997,40 +1010,36 @@ plot(hc)
 
 ```{r}
 hcd <- as.dendrogram(hc)
-nodePar <- list(lab.cex = 0.6, pch = c(NA,20), cex = 0.8, col = "blue")
+nodePar <- list(lab.cex = 0.6, pch = c(NA,20), cex = 0.8, col = "lightgreen")
 plot(hcd, ylab = "Height", nodePar = nodePar, horiz = TRUE, edgePar = list(col = 2:3, lwd = 2:1))
 ```
+Através do clustering hierárquico é possível ver que há uma relação entre os genes sendo possível agrupá-los em alguns clusteres.
+
 ```{r}
 heatmap(genes_top50, labCol = sort(metadados$SEX))
 ```
+O heatmap não revela nenhum padrão de expressão génica entre homens e mulheres, não havendo o agrupamento de genes em dois clusteres associados ao sexo.
 
-```{r K-means}
+## Clustering de genes de acordo com a sobrevivência dos pacientes
+
+```{r}
+heatmap(genes_top50, labCol = sort(metadados$OS_STATUS))
+```
+Através da análise do heatmap não se consegue distinguir padrões ou clusteres para a sobrevivência dos pacientes baseado na expressão génica.
+
+```{r}
 set.seed(123)
-logCPM_matrix <- logCPM_matrix[1:length(metadados$SEX)]
+logCPM_matrix <- logCPM_matrix[1:length(metadados$OS_STATUS)]
 centers <- cut(logCPM_matrix, breaks = 4)
 centers_factor <- factor(centers)
-sex_factor <- factor(metadados$SEX)
+live_factor <- factor(metadados$OS_STATUS)
 
 levels(centers_factor) <- c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4")
 
-table <- table(centers_factor, sex_factor)
+table <- table(centers_factor, live_factor)
 print(table)
 ```
-
-## Clustering não supervisionado - MDS plot
-
-```{r MDS plot}
-mds <- cmdscale(dist(logCPM))
-
-mds_df <- data.frame(X = mds[, 1], Y = mds[, 2], Sexo = sex_factor)
-
-library(ggplot2)
-ggplot(mds_df, aes(x = X, y = Y, color = Sexo)) +
-  geom_point() +
-  labs(title = "MDS Plot com Sexo") +
-  theme_minimal()
-```
-
+Em contraste, ao distribuir os genes em diferentes clusteres tendo em conta o estado de sobrevivência dos pacientes, obtivémos resultados que sugerem que os genes nos diferentes clusters podem estar envolvidos em diferentes processos biológicos dado que há uma distribuição diferente dos genes pelos 4 clusteres. É interessante destacar que há um nº mais elevado de genes no Cluster 2, o que pode indicar uma possível associação destes com algum processo biológico mais importante para a sobrevivência do que os genes nos outros clusters. 
 
 # **Redução da dimensionalidade**
 
@@ -1125,6 +1134,6 @@ scatterplot3d(pca_data, color = as.integer(merged_df$OS_STATUS), pch = 16,
               xlab = "PC1", ylab = "PC2", zlab = "PC3", main = "Representação de 3 dimensões - OS_STATUS")
 
 ```
-Com a observação dos diferentes PCAs que destacam diferentes categorias dos metadados, de forma a tentar visualizar melhor a separação entre os diferentes fatores, é possível determinar que há agrupamento notével ente os diferentes grupos das variáveis analisada: `Sample_site`, `CUMULATIVE_TREATMENT_STAGE_COUNT`, `CUMULATIVE_TREATMENT_TYPE_COUNT` e `OS_STATUS`. Entretanto, como a observação foi realizada apenas até o terceiro PCA (explicação conjunta de 34,5% dos dados), a variação entre grupos distintos de amostras não está completamente representada. 
+Com a observação dos diferentes PCAs que destacam diferentes categorias dos metadados, de forma a tentar visualizar melhor a separação entre os diferentes fatores, é possível determinar que há agrupamento notável ente os diferentes grupos das variáveis analisada: `Sample_site`, `CUMULATIVE_TREATMENT_STAGE_COUNT`, `CUMULATIVE_TREATMENT_TYPE_COUNT` e `OS_STATUS`. Entretanto, como a observação foi realizada apenas até o terceiro PCA (explicação conjunta de 34,5% dos dados), a variação entre grupos distintos de amostras não está completamente representada. 
 
 
