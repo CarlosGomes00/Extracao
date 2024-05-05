@@ -32,21 +32,8 @@ O conjunto de dados selecionados para este trabalho foram retirados de um estudo
 
 Este trabalho tem como objetivo analisar os dados de expressão de pacientes com AML, comparando os seus dados transcriptómicos de acordo com o sexo e grupo dos pacientes, com vista a obter informações sobre genes diferencialmente expressos e enriquecidos, clusters de genes e/ou de amostras e que genes parecem ter maior importância no transcriptoma associado a AML.
 
-Para começar com a análise, primeiro procedemos à **instalação** de algumas bibliotecas!
-
-```{r Instalação dos packages}
-
-# options(repos = c(CRAN = "https://cloud.r-project.org"))   Foi necessário definir um repositório no CRAN manualmente 
-# install.packages("summarytools")
-# install.packages("ggpubr")
-# install.packages("tidyverse")
-# install.packages("car", dependencies = "Imports")
-# install.packages("carData")
-#install.packages("readr")
-
-```
-
-Depois da sua instalação, fizemos o seu **carregamento**!
+Para começar com a análise, primeiro procedemos à **instalação** de algumas bibliotecas.
+Depois da sua instalação, fizemos o seu **carregamento**.
 
 ```{r Import dos packages}
 library(summarytools)
@@ -54,9 +41,14 @@ library(car)
 library(readr)
 library(dplyr)
 library(ggplot2)
+library(gplots)
 library(ggpubr)
 library(edgeR)
 library(limma)
+library(ggfortify)
+library(scatterplot3d)
+library(factoextra)
+
 ```
 
 # **Datasets**
@@ -69,13 +61,13 @@ Depois de importar as bibliotecas necessárias, começamos por **associar** os d
 
 ```{r Leitura dos ficheiros}
 
-RNA_cpm = read.table("data_mrna_seq_cpm.txt", header = T, sep = '\t')   
+RNA_cpm = read.table("Dados/data_mrna_seq_cpm.txt", header = T, sep = '\t')   
 
-data_patient = read.table("data_patient.txt", header = T, sep = '\t')
+data_patient = read.table("Dados/data_clinical_patient.txt", header = T, sep = '\t')
 
-data_sample = read_tsv("data_sample.txt", na = "", show_col_types = FALSE)
+data_sample = read_tsv("Dados/data_clinical_sample.txt", na = "", show_col_types = FALSE)
 
-data_mutations = read.table("data_mutations.txt", header = T, sep = '\t')
+data_mutations = read.table("Dados/data_mutations.txt", header = T, sep = '\t')
 
 ```
 
@@ -183,42 +175,6 @@ any(is.na(RNA_cpm))
 
 Os valores omissos que existiam no dataframe estavam todos presentes na mesma coluna ('Entrez_Gene_Id"), por isso depois da sua eliminação, já não existem NAs.
 
-Por último, decidimos verificar se existem genes com uma frequência de expressão zero, em acima de 90% das amostras:
-
-```{r Retirar genes com expressão 0 frequente}
-
-#verificar_zero_frequente <- function(RNA_cpm) {genes_zero_frequente <- character(0)
-#  total_amostras <- ncol(RNA_cpm) - 1 
-#  for (i in 1:nrow(RNA_cpm)) {
-#    proporcao_zero <- sum(RNA_cpm[i, -1] == 0) / total_amostras
-#    if (proporcao_zero > 0.9) {
-#      genes_zero_frequente <- c(genes_zero_frequente, RNA_cpm[i, 1])
-#    }
-#  }
-#  return(genes_zero_frequente)
-#}
-
-#verificar_zero_frequente(RNA_cpm)
-```
-
--   **verificar_zero_frequente \<- function(RNA_cpm) {...}** -\> Definir uma função;
-
--   **genes_zero_frequente \<- character(0)** -\> Inicia um vetor vazio para armazenar o nome dos genes;
-
--   **total_amostras \<- ncol(RNA_cpm) - 1** -\> Calcula o número total de amostras, com exceção da primeira coluna que corresponde ao nome dos genes;
-
--   **for (i in 1:nrow(RNA_cpm))** -\> Inicia um loop sobre cada linha;
-
--   **proporcao_zero \<- sum(RNA_cpm[i, -1] == 0) / total_amostras** -\> Calcula a proporção de valores 0 em cada linha, excluindo a primeira coluna;
-
--   **if (proporcao_zero \> 0.9)** -\> Verifica se a proporção dos valores é maior que 90%
-
--   **genes_zero_frequente \<- c(genes_zero_frequente, RNA_cpm[i, 1])** -\> Caso a condição anterior seja verdadeira, o nome do gene é adicionado ao vetor;
-
--   **return(genes_zero_frequente)** -\> Retorna o vetor contendo o nome dos genes com expressão 0 maior que 90%.
-
-É possível observar que o código retorna o vetor vazio, o que significa que nenhum gene possui uma frequência de zeros superior a 90% em relação ao número total de amostras.
-
 
 ### Metadados {.tabset}
 
@@ -304,7 +260,7 @@ Percebemos que existem IDs dos pacientes duplicados, o que demonstra que várias
 
 Além disso, não existem amostras duplicadas, tal como era previsto.
 
-```{r Fatores}
+```{r Tipo de dados dos metadados das amostras}
 fatores_sample_data = c(3:25, 27:29, 46, 49, 52, 54, 57:69, 71:74)
 for (coluna in fatores_sample_data) {
   data_sample[[coluna]] = as.factor(data_sample[[coluna]])
@@ -377,7 +333,7 @@ head(row.names(data_patient))
 
 O dataset corresponde a um dataframe com 562 amostras e 22 variáveis. As colunas possuem três tipos de estrutura de dados ("character", "integer" e "numeric"), mas iremos transformar em fatores as variáveis não numéricas.
 
-```{r Fatores}
+```{r Tipo de dados - Metadados do paciente}
 fatores_patient = c(3, 2, 5:19, 21:22)
 for (coluna in fatores_patient) {
   data_patient[[coluna]] = as.factor(data_patient[[coluna]])
@@ -487,8 +443,8 @@ Ao analisar a estrutura de dados de cada coluna, percebemos que era necessário 
 Por fim, procedemos à criação de um subset que contém apenas as linhas de "data_mutations" correspondentes às mutações que estão presentes nos dados de "RNA_cpm" para restringir a análise apenas às mutações para as quais temos dados de expressão gênica.
 
 ```{r Filtragem dos dados m}
-
 mutations_subset = data_mutations %>% filter(data_mutations$Hugo_Symbol %in% RNA_cpm$Hugo_Symbol)
+
 head(mutations_subset)
 ```
 
@@ -509,7 +465,7 @@ colnames(metadados)
 ```{r}
 row.names(metadados) = metadados$SAMPLE_ID
 
-variaveis_interessantes = c(1:4, 6, 8:10, 19, 28, 29, 52, 70, 73, 76:78, 90:95)
+variaveis_interessantes = c(1:4, 6, 8:10, 18:29, 52, 70, 73, 76:78, 90:95)
 
 metadados = metadados[, variaveis_interessantes]
 
@@ -794,104 +750,251 @@ Considerando um elevado tamanho da amostra, a análise ANOVA foi feita, mesmo sa
 
 # **Expressão diferencial**
 
-## Genes diferencialmente expressos entre Homens e Mulheres
-
 Dado que os nossos dados já sofreram uma normalização TMM e são valores CPM, um pré-processamento equivalente à função <cpm(calcNormFactors(y))> (onde y seria o objeto DGElist que teria as raw counts) normalmente utilizada aquando da análise de expressão diferencial com o package limma.Por isso, iremos fazer uma transformação logaritmica para finalizar o processo de normalização dos dados normalmente feito antes da análise da expressão génica diferencial com o limma.
 
 
-Dado que os nossos dados já sofreram uma normalização TMM e são valores CPM, um pré-processamento equivalente à função <cpm(calcNormFactors(y))> (onde y seria o objeto DGElist que teria as raw counts) normalmente utilizada aquando da análise de expressão diferencial com o package limma.Por isso, filtramos os genes para que apenas aqueles que tenham pelo menos metade dos pacientes com CPM superior a 1 fossem analisados e depois fizémos uma transformação logaritmica para finalizar o processo de normalização dos dados que é normalmente feito antes da análise da expressão génica diferencial com o limma (pipeline limma-trend)
+Dado que os nossos dados já sofreram uma normalização TMM e são valores CPM, um pré-processamento equivalente à função <cpm(calcNormFactors(y))> (onde y seria o objeto DGElist que teria as raw counts) normalmente utilizada aquando da análise de expressão diferencial com o package limma.Por isso, filtramos os genes para que apenas aqueles que tenham pelo menos metade dos pacientes com CPM superior a 1 fossem analisados e depois fizémos uma transformação logaritmica para finalizar o processo de normalização dos dados que é normalmente feito antes da análise da expressão génica diferencial com o limma (pipeline limma-trend).
 
 ```{r preparação dos dados para DE - filtragem}
 selected_genes = rowMeans(RNA_cpm[,-1] > 1) > 0.5
 RNA_cpm_filtered = RNA_cpm[selected_genes, ]
 RNA_cpm_filtered = RNA_cpm_filtered[, -1]
-head(RNA_cpm_filtered)
+
+logCPM = log2(RNA_cpm_filtered + 1)
+head(logCPM)
+
+y <- DGEList(counts = logCPM, genes = row.names(logCPM))
 ```
 Depois da filtragem, ficámos com 14405 genes para a análise de expressão diferencial.
 
-```{r Definição do design experimental}
-Sexo = metadados$SEX
-table(Sexo)
-design = model.matrix(~0+Sexo, data = RNA_cpm_filtered)
-colnames(design) = levels(Sexo)
-row.names(design) = colnames(RNA_cpm_filtered)
-head(design)
-```
+## Variável: Sexo
 
-```{r Análise de expressão diferencial}
-logCPM = log2(RNA_cpm_filtered + 1)
-contrast = makeContrasts(Female - Male, levels = design)
-fit_log = lmFit(logCPM, design)
-fit_log = contrasts.fit(fit_log, contrast)
-fit_log = eBayes(fit_log, trend=T)
+```{r Expressão diferencial entre sexos}
+table(metadados$SEX)
+design_sex = model.matrix(~0+metadados$SEX, data = y$samples)
+colnames(design_sex) = levels(metadados$SEX)
+row.names(design_sex) = colnames(logCPM)
 
-topTable(fit = fit_log, genelist = row.names(logCPM))
+contrast_sex = makeContrasts(Female - Male, levels = design_sex)
+fit_sex = lmFit(logCPM, design_sex)
+fit_sex = contrasts.fit(fit_sex, contrast_sex)
+fit_sex = eBayes(fit_sex, trend=T)
 
-summa.fit_log = decideTests(fit_log)
-summary(summa.fit_log)
+topTable(fit = fit_sex, genelist = row.names(logCPM))
 
-## Opções para a DE:
-dge.estDisp.out <- estimateDisp(dge, design)
-fit <- glmFit(dge.estDisp.out, design)
-lrt <- glmLRT(fit, coef = 2)
-
+summa.fit_sex = decideTests(fit_sex)
+summary(summa.fit_sex)
 ```
 ```{r}
-plotMD(fit_log)
+plotMD(fit_sex)
 ```
 
-
-Não há genes diferencialmente expressos entre os sexos.
-
-
+## Variável: Local de onde foi retirada a amostra
 ```{r DE de acordo com o tipo de amostra}
-#Outra variável (tipo de amostra)
-subset_sample$SAMPLE_SITE = as.factor(subset_sample$SAMPLE_SITE)
-levels(subset_sample$SAMPLE_SITE) = make.names(levels(subset_sample$SAMPLE_SITE))
+levels(metadados$SAMPLE_SITE) = make.names(levels(metadados$SAMPLE_SITE))
 
-y <- DGEList(counts = RNA_cpm, genes = row.names(RNA_cpm), group = subset_sample$SAMPLE_SITE)
+design_site = model.matrix(~0+metadados$SAMPLE_SITE, data = y$samples)
+colnames(design_site) = levels(metadados$SAMPLE_SITE)
+head(design_site)
 
-design2 = model.matrix(~0+subset_sample$SAMPLE_SITE, data = y$samples)
-colnames(design2) = levels(subset_sample$SAMPLE_SITE)
-head(design2)
-```
-
-```{r}
-contrast2 = makeContrasts( Bone_Leuk = Bone.Marrow.Aspirate - Leukapheresis, 
+contrast_site = makeContrasts( Bone_Leuk = Bone.Marrow.Aspirate - Leukapheresis, 
                            Bone_Blood = Bone.Marrow.Aspirate - Peripheral.Blood,
-                           Leuk_Blood = Leukapheresis - Peripheral.Blood, levels=design2)
-keep <- filterByExpr(y, design2)
-y <- y[keep, , keep.lib.sizes=FALSE]
+                           Leuk_Blood = Leukapheresis - Peripheral.Blood,
+                           levels=design_site)
+fit_site = lmFit(logCPM, design_site)
+fit_site = contrasts.fit(fit_site, contrast_site)
+fit_site = eBayes(fit_site, trend=T)
 
-v <- voom(y,design2)
+topTable(fit = fit_site, genelist = row.names(logCPM))
 
-fit2 <- lmFit(v, design2)
+summa.fit_site = decideTests(fit_site)
+summary(summa.fit_site)
 
-fit2 <- contrasts.fit(fit2, contrast2)
-
-fit2 <- eBayes(fit2, trend = F, robust = F)
-
-summa.fit2 <- decideTests(fit2)
-
-summary(summa.fit2)
-```
-```{r}
-plotMD(fit2,coef="Leuk_Blood",status=summa.fit2[,"Leuk_Blood"], values = c(-1, 1), hl.col=c("blue","red"), main = "Leukapheresis vs Periphal Blood")
-plotMD(fit2,coef="Bone_Leuk",status=summa.fit2[,"Bone_Leuk"], values = c(-1, 1), hl.col=c("blue","red"), main = "Leukapheresis vs Bone Marrow")
 ```
 
-```{r}
-volcanoplot(fit2,coef="Leuk_Blood",highlight=19,names=row.names(fit2), main ="Leukapheresis vs Periphal Blood")
-volcanoplot(fit2,coef="Bone_Leuk",highlight=11,names=row.names(fit2), main ="Leukapheresis vs Bone Marrow")
+```{r DE plots - site}
+par(mfrow= c(1, 2))
+plotMD(fit_site,coef="Leuk_Blood",status=summa.fit_site[,"Leuk_Blood"], values = c(-1, 1), hl.col=c("blue","red"), main = "Leukapheresis vs Periphal Blood")
+plotMD(fit_site,coef="Bone_Leuk",status=summa.fit_site[,"Bone_Leuk"], values = c(-1, 1), hl.col=c("blue","red"), main = "Leukapheresis vs Bone Marrow")
+```
+
+```{r volcano plots - site}
+par(mfrow= c(1, 2))
+volcanoplot(fit_site,coef="Leuk_Blood",highlight=3,names=row.names(fit_site), main ="Leukapheresis vs Periphal Blood")
+volcanoplot(fit_site,coef="Bone_Leuk",highlight=3,names=row.names(fit_site), main ="Leukapheresis vs Bone Marrow")
+```
+
+## Variável: Sobrevivência do paciente
+```{r DE de acordo com a sobrevivencia dos pacientes}
+table(metadados$OS_STATUS)
+metadados$OS_STATUS <- gsub("0:LIVING", "Alive", metadados$OS_STATUS)
+metadados$OS_STATUS <- gsub("1:DECEASED", "Deceased", metadados$OS_STATUS)
+metadados$OS_STATUS <- as.character(metadados$OS_STATUS)
+metadados$OS_STATUS <- ifelse(is.na(metadados$OS_STATUS) | nchar(metadados$OS_STATUS) == 0, "Unknown", metadados$OS_STATUS)
+table(metadados$OS_STATUS)
+metadados$OS_STATUS <- as.factor(metadados$OS_STATUS)
+
+design_status = model.matrix(~0+metadados$OS_STATUS, data = y$samples)
+colnames(design_status) = levels(metadados$OS_STATUS)
+
+
+contrast_status = makeContrasts(Alive_Deceased = Alive - Deceased,
+                                Alive_Unknown = Alive - Unknown,
+                                Deceased_Unknown = Deceased - Unknown,
+                                levels=design_status)
+
+fit_status = lmFit(y$counts, design_status)
+fit_status = contrasts.fit(fit_status, contrast_status)
+fit_status = eBayes(fit_status, trend=T)
+topTable(fit = fit_status, genelist = y$genes)
+
+summa.fit_status = decideTests(fit_status)
+summary(summa.fit_status)
+```
+## Variável: Estado dos tratamentos cumulativos
+```{r DE de acordo com o estado dos tratamentos cumulativos}
+table(metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+
+metadados$CUMULATIVE_TREATMENT_STAGE_COUNT <- gsub(0, "Zero", metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+metadados$CUMULATIVE_TREATMENT_STAGE_COUNT <- gsub(1, "Um", metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+metadados$CUMULATIVE_TREATMENT_STAGE_COUNT <- gsub(2, "Dois", metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+metadados$CUMULATIVE_TREATMENT_STAGE_COUNT <- gsub(3, "Três", metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+metadados$CUMULATIVE_TREATMENT_STAGE_COUNT <- gsub(4, "Quatro", metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+metadados$CUMULATIVE_TREATMENT_STAGE_COUNT <- gsub(5, "Cinco", metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+metadados$CUMULATIVE_TREATMENT_STAGE_COUNT <- gsub(6, "Seis", metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+metadados$CUMULATIVE_TREATMENT_STAGE_COUNT <- gsub(7, "Sete", metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+metadados$CUMULATIVE_TREATMENT_STAGE_COUNT <- gsub(8, "Oito", metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+
+metadados$CUMULATIVE_TREATMENT_STAGE_COUNT = as.factor(metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+table(metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+
+design_stage = model.matrix(~0+metadados$CUMULATIVE_TREATMENT_STAGE_COUNT, data = y$samples)
+colnames(design_stage) = levels(metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
+head(design_stage)
+
+contrast_stage = makeContrasts('0_1'= Zero - Um, '0_2'= Zero - Dois, '0_3'= Zero - Três, '0_4'= Zero - Quatro, '0_5'= Zero - Cinco, '0_6' = Zero - Seis, '0_7' = Zero - Sete, '0_8' = Zero - Oito, '1_2'= Um - Dois, '1_3'= Um - Três, '1_4'= Um - Quatro, '1_5'= Um - Cinco,
+'1_6' = Um - Seis, '1_7' = Um - Sete, '1_8' = Um - Oito, '2_3'= Dois - Três, '2_4'= Dois - Quatro, '2_5'= Dois - Cinco, '2_6' = Dois - Seis, '2_7' = Dois - Sete, '2_8' = Dois - Oito, '3_4'= Três - Quatro, '3_5'= Três - Cinco, '3_6' = Três - Seis, '3_7' = Três - Sete, '3_8' = Três - Oito, '4_5'= Quatro - Cinco, '4_6' = Quatro - Seis, '4_7' = Quatro - Sete, '4_8' = Quatro - Oito, '5_6' = Cinco - Seis, '5_7' = Cinco - Sete, '5_8' = Cinco - Oito,
+'6_7' = Seis - Sete, '6_8' = Seis - Oito, '7_8' = Sete - Oito, levels=design_stage)
+
+fit_stage = lmFit(y$counts, design_stage)
+fit_stage = contrasts.fit(fit_stage, contrast_stage)
+fit_stage = eBayes(fit_stage, trend=T)
+topTable(fit = fit_stage, genelist = y$genes)
+summa.fit_stage = decideTests(fit_stage)
+summary(summa.fit_stage)
+```
+```{r volcano plots - estado de tratamento}
+par(mfrow=c(2, 5))
+volcanoplot(fit_stage,coef="2_3",highlight=5, names=row.names(fit_stage), main ="Fases de tratamento: 2 vs 3")
+volcanoplot(fit_stage,coef="3_4",highlight=1, names=row.names(fit_stage), main ="Fases de tratamento: 3 vs 4")
+volcanoplot(fit_stage,coef="3_7",highlight=3, names=row.names(fit_stage), main ="Fases de tratamento: 3 vs 7")
+volcanoplot(fit_stage,coef="0_8",highlight=2, names=row.names(fit_stage), main ="Fases de tratamento: 0 vs 8")
+volcanoplot(fit_stage,coef="1_8",highlight=2, names=row.names(fit_stage), main ="Fases de tratamento: 1 vs 8")
+volcanoplot(fit_stage,coef="2_8",highlight=4, names=row.names(fit_stage), main ="Fases de tratamento: 2 vs 8")
+volcanoplot(fit_stage,coef="3_8",highlight=3, names=row.names(fit_stage), main ="Fases de tratamento: 3 vs 8")
+volcanoplot(fit_stage,coef="4_8",highlight=5, names=row.names(fit_stage), main ="Fases de tratamento: 4 vs 8")
+volcanoplot(fit_stage,coef="5_8",highlight=2, names=row.names(fit_stage), main ="Fases de tratamento: 5 vs 8")
+volcanoplot(fit_stage,coef="6_8",highlight=2, names=row.names(fit_stage), main ="Fases de tratamento: 6 vs 8")
+```
+
+## Variável: Nº de tratamentos cumulativos
+```{r DE de acordo com o nº de tratamentos}
+table(metadados$CUMULATIVE_TREATMENT_TYPE_COUNT)
+
+metadados$CUMULATIVE_TREATMENT_TYPE_COUNT <- gsub(0, "Zero", metadados$CUMULATIVE_TREATMENT_TYPE_COUNT)
+metadados$CUMULATIVE_TREATMENT_TYPE_COUNT <- gsub(1, "Um", metadados$CUMULATIVE_TREATMENT_TYPE_COUNT)
+metadados$CUMULATIVE_TREATMENT_TYPE_COUNT <- gsub(2, "Dois", metadados$CUMULATIVE_TREATMENT_TYPE_COUNT)
+metadados$CUMULATIVE_TREATMENT_TYPE_COUNT <- gsub(3, "Três", metadados$CUMULATIVE_TREATMENT_TYPE_COUNT)
+metadados$CUMULATIVE_TREATMENT_TYPE_COUNT <- gsub(4, "Quatro", metadados$CUMULATIVE_TREATMENT_TYPE_COUNT)
+metadados$CUMULATIVE_TREATMENT_TYPE_COUNT <- gsub(5, "Cinco", metadados$CUMULATIVE_TREATMENT_TYPE_COUNT)
+
+
+metadados$CUMULATIVE_TREATMENT_TYPE_COUNT = as.factor(metadados$CUMULATIVE_TREATMENT_TYPE_COUNT)
+table(metadados$CUMULATIVE_TREATMENT_TYPE_COUNT)
+
+design_ntreat = model.matrix(~0+metadados$CUMULATIVE_TREATMENT_TYPE_COUNT, data = y$samples)
+colnames(design_ntreat) = levels(metadados$CUMULATIVE_TREATMENT_TYPE_COUNT)
+head(design_ntreat)
+
+contrast_ntreat = makeContrasts('0_1'= Zero - Um, '0_2'= Zero - Dois, '0_3'= Zero - Três, '0_4'= Zero - Quatro, '0_5'= Zero - Cinco,
+                                '1_2'= Um - Dois, '1_3'= Um - Três, '1_4'= Um - Quatro, '1_5'= Um - Cinco,
+                                '2_3'= Dois - Três, '2_4'= Dois - Quatro, '2_5'= Dois - Cinco,
+                                '3_4'= Três - Quatro, '3_5'= Três - Cinco,
+                                '4_5'= Quatro - Cinco,
+                                levels=design_ntreat)
+
+fit_ntreat = lmFit(y$counts, design_ntreat)
+fit_ntreat = contrasts.fit(fit_ntreat, contrast_ntreat)
+fit_ntreat = eBayes(fit_ntreat, trend=T)
+topTable(fit = fit_ntreat, genelist = y$genes)
+summa.fit_ntreat = decideTests(fit_ntreat)
+summary(summa.fit_ntreat)
 ```
 
 
-Para a expressão diferencial analisaram-se várias variáveis: sexo, tipo de amostra retirada, 
-Quanto ao sexo, não foram encontrados genes diferencialmente expressos, o que indica que o sexo não é um fator diferencial da expressão dos genes nas amostras destes pacientes.
-Na análise da expressão tendo em conta o tipo de amostra retirada (medula óssea, plasma do sangue periférico ou glóbulos brancos através de leucaférese (Leukapheresis), foram detetados alguns genes diferencialmente expressos entre as amostras. Na comparação entre glóbulos brancos e medula foram encontrados 8 genes subexpressos e 3 sobrexpressos, enquanto que para o contraste entre glóbulos vermelhos e soro foram encontrados 3 genes subexpressos e 16 sobrexpressos.No vulcano plot é ainda possível ver o nome dos genes diferencialmente expressos, sendo interessante destacar a presença dos mesmos genes na comparação dos genes diferencialmente expressos entre os glóbulos vermelhos e a medula ossea, e entre os glóbulos e o soro, sendo que os 3 genes subexpressos numa comparação são os 3 que estão sobrepxressos. Esta presença comum nas comparações sugere que a razão para a expressão diferencial destes 3 genes está nos globulos brancos, dado estarem nas duas comparações feitas. Adicionalmente, também é interessante destacar nesta análise a presença de genes associados à resposta imune (e.g. SIGLEC6 e ROBO4) e ao metabolismo celular (e.g. TMEM30B e PROSER1). 
-Numa próxima etapa, é necessário averiguar melhora ontologia destes genes e perceber em que é que vias e funções estão envolvidos.
+```{r Volcano plots - nº de tratamentos}
+par(mfrow=c(2, 2))
+volcanoplot(fit_ntreat,coef="0_5",highlight=2, names=row.names(fit_ntreat), main ="Tipos de tratamento: 0 vs 5")
+volcanoplot(fit_ntreat,coef="1_5",highlight=4, names=row.names(fit_ntreat), main ="Tipos de tratamento: 1 vs 5")
+volcanoplot(fit_ntreat,coef="2_5",highlight=4, names=row.names(fit_ntreat), main ="Tipos de tratamento: 2 vs 5")
+volcanoplot(fit_ntreat,coef="3_5",highlight=4, names=row.names(fit_ntreat), main ="Tipos de tratamento: 3 vs 5")
+```
 
-# *Redução da dimensionalidade*
+Para a expressão diferencial analisaram-se várias variáveis: sexo, tipo de amostra retirada, a sobrevivência do paciente, o nº de tratamentos e o estado dos tratamentos cumulativos que fez.
+Na maioria das comparações realizadas não foram encontrados genes diferencialmente expressos. Relativamente ao sexo, em contraste com o que foi encontrado no artigo, não foram encontrados genes diferencialmente expressos, sugerindo que o sexo não é um fator diferencial da expressão dos genes nas amostras destes pacientes.
+Na análise da expressão tendo em conta o tipo de amostra retirada (medula óssea, plasma do sangue periférico ou glóbulos brancos através de leucaférese (Leukapheresis), foram detetados alguns genes diferencialmente expressos entre as amostras. Na comparação entre glóbulos brancos e sangue periférico foram encontrados 2 genes subexpressos e 1 sobrexpresso, enquanto que para o contraste entre glóbulos brancos e medula foram encontrados 1 gene subexpresso e 2 sobrexpressos.No vulcano plot é ainda possível ver o nome dos genes diferencialmente expressos, sendo interessante destacar a presença dos mesmos genes na comparação dos genes diferencialmente expressos entre os glóbulos brancos e o plasma do sangue periférico, e entre os glóbulos brancos e a medula óssea, sendo que os genes subexpressos numa comparação são os que estão sobrepxressos na outra. Esta presença comum nas comparações sugere que a razão para a expressão diferencial destes 3 genes está associada aos globulos brancos, dado serem o elemento em comum nas duas comparações feitas. Adicionalmente, também é interessante destacar a função destes genes diferencialmente expressos como, por exemplo, do gene STK24 que codifica uma proteína quinase envolvida na regulação da apoptose e na resposta ao stress celular e do gene CHFR que está envolvido na regulação do ciclo celular e na manutenção da integridade do genoma, sendo que alterações no gene CHFR, assim como na sua expressão, já foram associadas a vários tipos de cancro, incluindo a LMA.
+Da mesma forma, alguns genes relacionados com o ciclo celular e resposta ao stress celular (e.g. DNAJC15 e TP73), manutenção da integridade e função celular (e.g. TIMP1, GDP2 e MICAL1) e regulação da expressão génica (e.g. GCFC2), foram encontrados diferencialmente expressos na comparação da fase mais avançada de tratamentos (fase 8) com os outros estados de tratamentos cumulativos e na comparação do nº de tratamentos cumulativos mais elevado com quantidades mais baixas de tratamentos a que os pacientes foram sujeitos. 
+Em conjunto estes resultados sugerem que os tratamentos para a LMA podem afetar a expressão génica de várias maneiras, incluindo a regulação de genes envolvidos na resposta ao stress celular, na proliferação celular e na diferenciação celular. Adicionalmente, a alteração na expressão destes genes pode estar associada à resposta do paciente ao tratamento ou até indicar a eficácia do tratamento.
+
+# **Clustering de genes**
+## Heatmaps
+
+```{r Heatmap}
+sexo <- basal.vs.lp$ENTREZID[1:100]
+i <- which(v$genes$ENTREZID %in% basal.vs.lp.topgenes)
+
+heatmap.2(logCPM[i,], scale="row", labRow=v$genes$SYMBOL[i], labCol=group, 
+   col= colorpanel(1000,"blue","white","red"), trace="none", density.info="none", 
+   margin=c(8,6), lhei=c(2,10), dendrogram="column")
+```
+
+```{r K-means}
+genes_sex <- row.names(summa.fit_sex)
+genes_sex_selecionados <- logCPM[genes_sex, ]
+genes_sex_selecionados <- as.matrix(genes_sex_selecionados)
+
+kmeans_sex <- kmeans(genes_sex_selecionados, centers = 2) 
+
+table(kmeans_sex$cluster)
+
+heatmap.2(genes_sex_selecionados, scale = "row", Rowv = T, Colv = NA, col = heat.colors(256), margins = c(5, 10), labRow = FALSE, main = "Heatmap dos Clusters dos Genes Diferencialmente Expressos entre Homens e Mulheres")
+
+```
+
+## Clustering Hierárquico
+
+```{r Clustering hierarquico}
+
+```
+
+## Clustering não supervisionado - MDS plot
+
+```{r MDS plot}
+par(mfrow=c(1,2))
+col.group <- group
+levels(col.group) <-  brewer.pal(nlevels(col.group), "Set1")
+col.group <- as.character(col.group)
+col.lane <- lane
+levels(col.lane) <-  brewer.pal(nlevels(col.lane), "Set2")
+col.lane <- as.character(col.lane)
+plotMDS(lcpm, labels=group, col=col.group)
+title(main="A. Sample groups")
+plotMDS(lcpm, labels=lane, col=col.lane, dim=c(3,4))
+title(main="B. Sequencing lanes")
+```
+
+
+# **Redução da dimensionalidade**
 
 A análise não supervisionada será aplicada nos dados expressão genética filtrados para os genes que apenas tenham pelo menos metade dos pacientes com CPM superior a 1 fossem analisados, e normalizado (`logCPM`). 
 
@@ -901,8 +1004,8 @@ A análise não supervisionada será aplicada nos dados expressão genética fil
 DADOS = t(logCPM) #Transpor os dados
 
 # União dos dados com metadados relevantes para análises:
-metadados_slect = metadados[,c(8, 21)] # Sleciona o SAMPLE_SITE e o OS_STATUS.
-merged_df <- merge(DADOS, metadados_slect, by = "row.names")
+metadados_select = metadados[,c(8, 30)] # Seleciona o SAMPLE_SITE e o OS_STATUS.
+merged_df <- merge(DADOS, metadados_select, by = "row.names")
 row.names(merged_df) <- merged_df$Row.names
 merged_df = merged_df[, -1]
 
@@ -928,7 +1031,7 @@ pca_result$x
 
 biplot(pca_result)
 
-````
+```
 
 
 
@@ -954,10 +1057,9 @@ A análise dos dados a partir de PCA permitiu concluir que os primeiros 132 comp
 
 ```{r}
 # Análise da qualidade das variáveis individuais nos dois primeiros componentes principais
-library(factoextra)
 fviz_famd_ind(pca_result, geom = c("point"), col.ind = "cos2", gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), palette = "rainbow", addEllipses = FALSE, ellipse.type = "confidence",ggtheme = theme_minimal(), repel = TRUE, labels = F)  
 
-````
+```
 
 No gráfico `Individual-PCA` é possível observar a qualidade da representação ("cos2") das variáveis individuais nos dois primeiros componentes principais (que em conjunto explicam 28,1% da variabilidade dos dados), assim nota-se que as variáveis mais próximas de zero, apresentam uma variação menos explicada do que as mais distantes (coloração alaranjada). 
 
@@ -965,8 +1067,6 @@ No gráfico `Individual-PCA` é possível observar a qualidade da representaçã
 
 ```{r}
 # Análise dos dados para diferentes metadados:
-library(ggfortify)
-library(scatterplot3d)
 # Sample_site:
 autoplot(pca_result, data = as.data.frame(merged_df), colour = 'SAMPLE_SITE', size = 2, main = "SAMPLE_SITE")
 
@@ -983,15 +1083,13 @@ autoplot(pca_result, data = as.data.frame(merged_df), colour = "CUMULATIVE_TREAT
 
 # "OS_STATUS"
 legenda_personalizada <- c("No inf" = "gray", "0:LIVING" = "red", "1:DECEASED" = "green")
-autoplot(pca_result, data = as.data.frame(merged_df_clean), colour = "OS_STATUS", size = 2, main = "OS_STATUS") +
+autoplot(pca_result, data = as.data.frame(merged_df), colour = "OS_STATUS", size = 2, main = "OS_STATUS") +
   scale_color_manual(values = legenda_personalizada) # Cinza são os NAs. 
 
-scatterplot3d(pca_data, color = as.integer(merged_df_clean$OS_STATUS), pch = 16,
+scatterplot3d(pca_data, color = as.integer(merged_df$OS_STATUS), pch = 16,
               xlab = "PC1", ylab = "PC2", zlab = "PC3", main = "Representação de 3 dimensões - OS_STATUS")
 
-````
-
-
+```
 Com a observação dos diferentes PCAs que destacam diferentes categorias dos metadados, de forma a tentar visualizar melhor a separação entre os diferentes fatores, é possível determinar que há agrupamento notével ente os diferentes grupos das variáveis analisada: `Sample_site`, `CUMULATIVE_TREATMENT_STAGE_COUNT`, `CUMULATIVE_TREATMENT_TYPE_COUNT` e `OS_STATUS`. Entretanto, como a observação foi realizada apenas até o terceiro PCA (explicação conjunta de 34,5% dos dados), a variação entre grupos distintos de amostras não está completamente representada. 
 
 
