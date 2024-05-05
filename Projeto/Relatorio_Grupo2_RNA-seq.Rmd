@@ -1009,11 +1009,13 @@ hcd <- as.dendrogram(hc)
 nodePar <- list(lab.cex = 0.6, pch = c(NA,20), cex = 0.8, col = "lightgreen")
 plot(hcd, ylab = "Height", nodePar = nodePar, horiz = TRUE, edgePar = list(col = 2:3, lwd = 2:1))
 ```
+
 Através do clustering hierárquico é possível ver que há uma relação entre os genes sendo possível agrupá-los em alguns clusteres.
 
 ```{r}
 heatmap(genes_top50, labCol = sort(metadados$SEX))
 ```
+
 O heatmap não revela nenhum padrão de expressão génica entre homens e mulheres, não havendo o agrupamento de genes em dois clusteres associados ao sexo.
 
 ## Clustering de genes de acordo com a sobrevivência dos pacientes
@@ -1021,6 +1023,7 @@ O heatmap não revela nenhum padrão de expressão génica entre homens e mulher
 ```{r}
 heatmap(genes_top50, labCol = sort(metadados$OS_STATUS))
 ```
+
 Através da análise do heatmap não se consegue distinguir padrões ou clusteres para a sobrevivência dos pacientes baseado na expressão génica.
 
 ```{r}
@@ -1035,6 +1038,7 @@ levels(centers_factor) <- c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4")
 table <- table(centers_factor, live_factor)
 print(table)
 ```
+
 Em contraste, ao distribuir os genes em diferentes clusteres tendo em conta o estado de sobrevivência dos pacientes, obtivémos resultados que sugerem que os genes nos diferentes clusters podem estar envolvidos em diferentes processos biológicos dado que há uma distribuição diferente dos genes pelos 4 clusteres. É interessante destacar que há um nº mais elevado de genes no Cluster 2, o que pode indicar uma possível associação destes com algum processo biológico mais importante para a sobrevivência do que os genes nos outros clusters. 
 
 # **Redução da dimensionalidade**
@@ -1195,7 +1199,7 @@ ml_data_NAs <- na.omit(ml_data)
 Agora, podemos passar à aplicação de diferentes modelos.
 
 
-### Árvore de decisão
+## Árvore de decisão
 
 Primeiramente, procedemos ao treino do modelo  com os dados selecionados previamente. 
 
@@ -1245,7 +1249,7 @@ precisao_DT
 
 
 
-### Naive-Bayes
+## Naive-Bayes
 
 Utilizando os dados de teste e dados de treino definidos anteriormente, realizou-se o treino e o teste do modelo Naive-Bayes.
 
