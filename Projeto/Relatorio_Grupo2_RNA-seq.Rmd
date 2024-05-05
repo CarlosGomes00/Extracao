@@ -32,7 +32,7 @@ O conjunto de dados selecionados para este trabalho foram retirados de um estudo
 
 Este trabalho tem como objetivo analisar os dados de expressão de pacientes com AML, comparando os seus dados transcriptómicos de acordo com o sexo, tipo de amostra e tratamentos cumulativos dados aos pacientes, com vista a obter informações sobre genes possivelmente expressos diferencialmente e/ou enriquecidos, que tenham um papel importante no tratamento da doença e na sobrevivência dos pacientes.
 
-```{r Import dos packages}
+```{r Import dos packages, echo=FALSE}
 library(summarytools)
 library(car)
 library(readr)
@@ -47,6 +47,10 @@ library(ggfortify)
 library(scatterplot3d)
 library(factoextra)
 library(MASS)
+library(caret)
+library(randomForest)
+library(party)
+library(e1071)
 ```
 
 # **Datasets**
@@ -478,7 +482,7 @@ print(dfSummary(metadados, style = 'grid', graph.magnif = 1, valid.col = FALSE,
 
 ```
 
-## *mutations_subset*
+## mutations_subset
 
 ```{r}
 colunas_relevantes = c("Chromosome", "Start_Position", "End_Position", "Strand", "Variant_Classification", "Variant_Type", "Tumor_Seq_Allele1", "Tumor_Seq_Allele2", "Validation_Status", "Mutation_Status", "impact", "n_vaf")
@@ -497,6 +501,7 @@ print(dfSummary(relev_data_mutations, style = 'grid', graph.magnif = 1, valid.co
 
 # **Análise exploratória**
 
+## Metadados dos pacientes
 Considerando variáveis relevantes:
 
 ```{r}
@@ -547,7 +552,7 @@ nome_maximo
 
 ```
 
-## *sample_data_rna*
+## Metadados das amostras
 
 ```{r}
 
@@ -575,7 +580,7 @@ nome_maximo
 
 
 
-## *mutations_subset*
+## mutations_subset
 
 ```{r}
 
@@ -629,7 +634,7 @@ Já no Alelo 2, a mutação mais comum é a alteração por Timina.
 
 # **Análise Univariada**
 
-## *Análise com as variáveis do metadado dos pacientes*
+## Análise com as variáveis do metadado dos pacientes
 
 As variáveis analisadas foram: Idade e sexo dos pacientes, teve como objectivo de determinar se os dois grupos de sexo ("Male" e "Female") deferiam quanto as idades. Para fazer esta análise, foi avaliado se os dois diferentes grupos apresentam médias diferentes. 
 
@@ -672,7 +677,7 @@ t.test(metadados$AGE_AT_DIAGNOSIS ~ metadados$SEX, na.rm = TRUE)
 
 Com base na análise final, é possível concluir que as idades diferem para os grupos "Male" e "Female". Isso implicaria que deve levar em consideração em análises de expressão com diferentes sexos que determinadas diferenças podem ser decorrentes da idade.
 
-## *Análise de varáveis no metadado de mutações*
+## Análise de varáveis no metadado de mutações
 
 - "n_vaf" (Frequência do Alelo Variante Normalizado),é a frequência do alelo variante, sendo uma variável numérica.
 
@@ -703,7 +708,7 @@ res # Não são estatisticamente diferentes
 
 Com os resultados obtidos, não é possível rejeitar a hipótese nula que as medianas são iguais, nesse caso significa que não há variações significativas entre as frequências de mutações dos alelos variantes para diferentes grupos de impacto.
 
-## *Análise para variáveis do metadado das amostra*
+## Análise para variáveis do metadado das amostra
 
 - "AGE_AT_PROCUREMENT" - Idade dos pacientes na aquisição das amostras.
 
@@ -746,7 +751,7 @@ print(tukey_result)
 
 Considerando um elevado tamanho da amostra, a análise ANOVA foi feita, mesmo sabendo que a variável "AGE_AT_PROCUREMENT" não segue a distribuição normal. É possível concluir que a idade dos pacientes interferiu, nesta situação, na determinação de dois grupos de risco: "Favoravel" e "Adverse". Para futuras análise é importante levar em conta essa possível associação entre a idade e os dois grupos de risco referidos.
 
-# **Expressão diferencial**
+# **Expressão diferencial** {.tabset}
 
 Após uma análise exploratória, concluimos que seria interessante tentar perceber se o sexo, tipo de amostras, o nº e fase dos tratamentos cumulativos e a sobrevivência dos pacientes estavam refletidos nos dados de expressão génica através da análise de expressão diferencial. 
 
@@ -754,6 +759,11 @@ Dado que os nossos dados já sofreram uma normalização TMM e são valores CPM,
 
 
 Dado que os nossos dados já sofreram uma normalização TMM e são valores CPM, um pré-processamento equivalente à função <cpm(calcNormFactors(y))> (onde y seria o objeto DGElist que teria as raw counts) normalmente utilizada aquando da análise de expressão diferencial com o package limma.Por isso, filtramos os genes para que apenas aqueles que tenham pelo menos metade dos pacientes com CPM superior a 1 fossem analisados e depois fizémos uma transformação logaritmica para finalizar o processo de normalização dos dados que é normalmente feito antes da análise da expressão génica diferencial com o limma (pipeline limma-trend).
+
+Na maioria das comparações realizadas não foram encontrados genes diferencialmente expressos. Relativamente ao sexo, em contraste com o que foi encontrado no artigo, não foram encontrados genes diferencialmente expressos, sugerindo que o sexo não é um fator diferencial da expressão dos genes nas amostras destes pacientes.
+Na análise da expressão tendo em conta o tipo de amostra retirada (medula óssea, plasma do sangue periférico ou glóbulos brancos através de leucaférese (Leukapheresis), foram detetados alguns genes diferencialmente expressos entre as amostras. Na comparação entre glóbulos brancos e sangue periférico foram encontrados 2 genes subexpressos e 1 sobrexpresso, enquanto que para o contraste entre glóbulos brancos e medula foram encontrados 1 gene subexpresso e 2 sobrexpressos.No vulcano plot é ainda possível ver o nome dos genes diferencialmente expressos, sendo interessante destacar a presença dos mesmos genes na comparação dos genes diferencialmente expressos entre os glóbulos brancos e o plasma do sangue periférico, e entre os glóbulos brancos e a medula óssea, sendo que os genes subexpressos numa comparação são os que estão sobrepxressos na outra. Esta presença comum nas comparações sugere que a razão para a expressão diferencial destes 3 genes está associada aos globulos brancos, dado serem o elemento em comum nas duas comparações feitas. Adicionalmente, também é interessante destacar a função destes genes diferencialmente expressos como, por exemplo, do gene STK24 que codifica uma proteína quinase envolvida na regulação da apoptose e na resposta ao stress celular e do gene CHFR que está envolvido na regulação do ciclo celular e na manutenção da integridade do genoma, sendo que alterações no gene CHFR, assim como na sua expressão, já foram associadas a vários tipos de cancro, incluindo a LMA.
+Da mesma forma, alguns genes relacionados com o ciclo celular e resposta ao stress celular (e.g. DNAJC15 e TP73), manutenção da integridade e função celular (e.g. TIMP1, GDP2 e MICAL1) e regulação da expressão génica (e.g. GCFC2), foram encontrados diferencialmente expressos na comparação da fase mais avançada de tratamentos (fase 8) com os outros estados de tratamentos cumulativos e na comparação do nº de tratamentos cumulativos mais elevado com quantidades mais baixas de tratamentos a que os pacientes foram sujeitos. 
+Em conjunto estes resultados sugerem que os tratamentos para a LMA podem afetar a expressão génica de várias maneiras, incluindo a regulação de genes envolvidos na resposta ao stress celular, na proliferação celular e na diferenciação celular. Adicionalmente, a alteração na expressão destes genes pode estar associada à resposta do paciente ao tratamento ou até indicar a eficácia do tratamento.
 
 ```{r preparação dos dados para DE - filtragem}
 selected_genes = rowMeans(RNA_cpm[,-1] > 1) > 0.5
@@ -767,7 +777,7 @@ y <- DGEList(counts = logCPM, genes = row.names(logCPM))
 ```
 Depois da filtragem, ficámos com 14405 genes para a análise de expressão diferencial.
 
-## Variável: Sexo
+## Variável: Sexo {.tabset}
 
 ```{r Expressão diferencial entre sexos}
 table(metadados$SEX)
@@ -789,7 +799,7 @@ summary(summa.fit_sex)
 plotMD(fit_sex)
 ```
 
-## Variável: Local de onde foi retirada a amostra
+## Variável: Local de onde foi retirada a amostra {.tabset}
 ```{r DE de acordo com o tipo de amostra}
 levels(metadados$SAMPLE_SITE) = make.names(levels(metadados$SAMPLE_SITE))
 
@@ -824,7 +834,7 @@ volcanoplot(fit_site,coef="Leuk_Blood",highlight=3,names=row.names(fit_site), ma
 volcanoplot(fit_site,coef="Bone_Leuk",highlight=3,names=row.names(fit_site), main ="Leukapheresis vs Bone Marrow")
 ```
 
-## Variável: Sobrevivência do paciente
+## Variável: Sobrevivência do paciente {.tabset}
 ```{r DE de acordo com a sobrevivencia dos pacientes}
 table(metadados$OS_STATUS)
 metadados$OS_STATUS <- gsub("0:LIVING", "Alive", metadados$OS_STATUS)
@@ -851,7 +861,11 @@ topTable(fit = fit_status, genelist = y$genes)
 summa.fit_status = decideTests(fit_status)
 summary(summa.fit_status)
 ```
-## Variável: Estado dos tratamentos cumulativos
+```{r}
+plotMD(fit_status)
+```
+
+## Variável: Estado dos tratamentos cumulativos {.tabset}
 ```{r DE de acordo com o estado dos tratamentos cumulativos}
 table(metadados$CUMULATIVE_TREATMENT_STAGE_COUNT)
 
@@ -897,7 +911,7 @@ volcanoplot(fit_stage,coef="5_8",highlight=2, names=row.names(fit_stage), main =
 volcanoplot(fit_stage,coef="6_8",highlight=2, names=row.names(fit_stage), main ="Fases de tratamento: 6 vs 8")
 ```
 
-## Variável: Nº de tratamentos cumulativos
+## Variável: Nº de tratamentos cumulativos {.tabset}
 ```{r DE de acordo com o nº de tratamentos}
 table(metadados$CUMULATIVE_TREATMENT_TYPE_COUNT)
 
@@ -931,7 +945,6 @@ summa.fit_ntreat = decideTests(fit_ntreat)
 summary(summa.fit_ntreat)
 ```
 
-
 ```{r Volcano plots - nº de tratamentos}
 par(mfrow=c(2, 2))
 volcanoplot(fit_ntreat,coef="0_5",highlight=2, names=row.names(fit_ntreat), main ="Tipos de tratamento: 0 vs 5")
@@ -940,26 +953,9 @@ volcanoplot(fit_ntreat,coef="2_5",highlight=4, names=row.names(fit_ntreat), main
 volcanoplot(fit_ntreat,coef="3_5",highlight=4, names=row.names(fit_ntreat), main ="Tipos de tratamento: 3 vs 5")
 ```
 
-Para a expressão diferencial analisaram-se várias variáveis: sexo, tipo de amostra retirada, a sobrevivência do paciente, o nº de tratamentos e o estado dos tratamentos cumulativos que fez.
-Na maioria das comparações realizadas não foram encontrados genes diferencialmente expressos. Relativamente ao sexo, em contraste com o que foi encontrado no artigo, não foram encontrados genes diferencialmente expressos, sugerindo que o sexo não é um fator diferencial da expressão dos genes nas amostras destes pacientes.
-Na análise da expressão tendo em conta o tipo de amostra retirada (medula óssea, plasma do sangue periférico ou glóbulos brancos através de leucaférese (Leukapheresis), foram detetados alguns genes diferencialmente expressos entre as amostras. Na comparação entre glóbulos brancos e sangue periférico foram encontrados 2 genes subexpressos e 1 sobrexpresso, enquanto que para o contraste entre glóbulos brancos e medula foram encontrados 1 gene subexpresso e 2 sobrexpressos.No vulcano plot é ainda possível ver o nome dos genes diferencialmente expressos, sendo interessante destacar a presença dos mesmos genes na comparação dos genes diferencialmente expressos entre os glóbulos brancos e o plasma do sangue periférico, e entre os glóbulos brancos e a medula óssea, sendo que os genes subexpressos numa comparação são os que estão sobrepxressos na outra. Esta presença comum nas comparações sugere que a razão para a expressão diferencial destes 3 genes está associada aos globulos brancos, dado serem o elemento em comum nas duas comparações feitas. Adicionalmente, também é interessante destacar a função destes genes diferencialmente expressos como, por exemplo, do gene STK24 que codifica uma proteína quinase envolvida na regulação da apoptose e na resposta ao stress celular e do gene CHFR que está envolvido na regulação do ciclo celular e na manutenção da integridade do genoma, sendo que alterações no gene CHFR, assim como na sua expressão, já foram associadas a vários tipos de cancro, incluindo a LMA.
-Da mesma forma, alguns genes relacionados com o ciclo celular e resposta ao stress celular (e.g. DNAJC15 e TP73), manutenção da integridade e função celular (e.g. TIMP1, GDP2 e MICAL1) e regulação da expressão génica (e.g. GCFC2), foram encontrados diferencialmente expressos na comparação da fase mais avançada de tratamentos (fase 8) com os outros estados de tratamentos cumulativos e na comparação do nº de tratamentos cumulativos mais elevado com quantidades mais baixas de tratamentos a que os pacientes foram sujeitos. 
-Em conjunto estes resultados sugerem que os tratamentos para a LMA podem afetar a expressão génica de várias maneiras, incluindo a regulação de genes envolvidos na resposta ao stress celular, na proliferação celular e na diferenciação celular. Adicionalmente, a alteração na expressão destes genes pode estar associada à resposta do paciente ao tratamento ou até indicar a eficácia do tratamento.
+# **Análise não supervisionada**
 
-## Multi-Dimensional Scaling(MDS)
-
-Com o objetivo de indentificar possíveis padrões ou agrupamentos nos dados de expressão diferencial que nos permitam de alguma forma perver características das amostras ou dos pacientes, especificamente a resposta deste ao tratamento, começamos por fazer Multi-Dimensional Scaling (MDS). MDS é uma representação visual e simplificada dos dados e da similaridade ou distância entre estes, permitindo assim a análise da relação entre os níveis de expressão. 
-
-```{r MDS plot}
-dist_euclidiana <- dist(logCPM)
-mds_result_isomds <- isoMDS(dist_euclidiana)
-
-plot(mds_result_isomds$points, main = "Multi-Dimensional Scaling(MDS)")
-```
-
-A análise do MDS plot revelou possíveis padrões ou agrupamentos dos níveis de expressão génica, o que nos levou a tentar encontrar este agrupamento (cluster) através de análises não supervisionadas como o clustering hierárquico ou k-means.
-
-# **Clustering de genes**
+Com o objetivo de indentificar possíveis padrões ou agrupamentos nos dados de expressão diferencial que nos permitam de alguma forma perver características das amostras ou dos pacientes, especificamente a resposta deste ao tratamento, começamos por uma análise não supervisionada como o clustering hierárquico ou k-means.
 
 Dada a expressão diferencial analisada anteriormente e os resultados obtidos num artigo anterior[^1], optámos por verificar se há a formação de clusteres associados ao sexo e à sobrevivência dos paicentes.
 
@@ -1070,11 +1066,8 @@ dados_pca = merged_df[, -c(14406:14409)]
 pca_result <- prcomp(dados_pca, scale = F)
 
 summary(pca_result)
-pca_result$rotation
-pca_result$x
 
 biplot(pca_result)
-
 ```
 
 
@@ -1138,33 +1131,13 @@ Com a observação dos diferentes PCAs que destacam diferentes categorias dos me
 
 # **Machine Learning**
 
-## **Preparação do modelo**
-
-Neste capitulo, primeiramente foi necessário proceder à instalação e importação de alguns packages
-
-```{r Instação e Importação de packages necessários para ML}
-
-install.packages("caret")
-
-install.packages("timeDate")
-
-install.packages("randomForest")
-
-library(caret)
-
-library(randomForest)
-
-library(party)
-
-library(e1071)
-
-```
+## Preparação do modelo
 
 Relativamente à utilização do modelos de Machine Learning, vamos começar por verificar o impacto de algumas características no tempo de sobrevida dos pacientes analisados. 
 
 Então, iremos utilizar o dataset "merged_df", adicionando ainda algumas colunas de metadados que possam ter relevancia na análise!  
 
-```{r}
+```{r Preparação}
 
 # Definir a seed para caso se queira reproduzir estes resultados
 
@@ -1203,6 +1176,20 @@ dados_treino <- ml_data[indices, ]
 
 dados_teste <- ml_data[-indices, ]
 
+
+
+dados_teste$sobrevida_paciente[dados_teste$sobrevida_paciente == ""] <- NA
+
+dados_teste_NAs <- na.omit(dados_teste)
+
+dados_treino$sobrevida_paciente[dados_treino$sobrevida_paciente == ""] <- NA
+
+dados_treino_NAs <- na.omit(dados_treino)
+
+ml_data$sobrevida_paciente[dados_teste$sobrevida_paciente == ""] <- NA
+
+ml_data_NAs <- na.omit(ml_data)
+
 ```
 
 Agora, podemos passar à aplicação de diferentes modelos.
@@ -1215,7 +1202,7 @@ Primeiramente, procedemos ao treino do modelo  com os dados selecionados previam
 ```{r Árvores de Decisão}
 
 # Definir o modelo
-modelo_dt = ctree(sobrevida_paciente ~ ., data = dados_treino)
+modelo_dt = ctree(sobrevida_paciente ~ ., data = dados_treino_NAs)
 
 # Visualizar o modelo
 print(modelo_dt)
@@ -1235,7 +1222,7 @@ Depois do treino, devemos avaliar a sua performance. Para isso, primeiramente é
 
 ```{r - DT Teste}
 
-testDT = predict(modelo_dt, dados_teste)
+testDT = predict(modelo_dt, dados_teste_NAs)
 
 ```
 
@@ -1245,12 +1232,12 @@ Após o teste, criamos uma tabela comparando os resultados obtidos e os resultad
 
 # Comparação dos resultados utilizando uma tabela
 
-table(testDT, dados_teste$sobrevida_paciente)
+table(testDT, dados_teste_NAs$sobrevida_paciente)
 
 
 # Calculo da precisão
 
-precisao_DT = mean(testDT == dados_teste$sobrevida_paciente)
+precisao_DT = mean(testDT == dados_teste_NAs$sobrevida_paciente)
 precisao_DT
 ```
 
@@ -1264,20 +1251,21 @@ Utilizando os dados de teste e dados de treino definidos anteriormente, realizou
 
 ```{r Naive-Bayes}
 
-modelo_nb = naiveBayes(sobrevida_paciente ~ ., data = dados_treino)
+modelo_nb = naiveBayes(sobrevida_paciente ~ ., data = dados_treino_NAs)
 
-testeNB = predict(modelo_nb, dados_teste)
+testeNB = predict(modelo_nb, dados_teste_NAs)
 
 ```
 
 Após o teste, procedeu-se à análise dos seus resultados utilizando uma tabela e calculando a sua precisão.
 
 ```{r NB - Avaliação}
-table(testeNB, dados_teste$sobrevida_paciente)
+table(testeNB, dados_teste_NAs$sobrevida_paciente)
 
-precisao_NB = mean(testeNB == dados_teste$sobrevida_paciente)
+precisao_NB = mean(testeNB == dados_teste_NAs$sobrevida_paciente)
 
 precisao_NB
 ```
-Na tabela obtida, é possível verificar bastnates missmatches entre os valores previstos pelo modelo e os valores reais. Calculando a sua precisão, verificou-se uma precisão de 41%, bastante mais baixa que o modelo anterior, podendo significar uma aleatoriedade do modelo criado. Isso pode acontecer devido a um mau tratamento de dados, má escolha de classes, ou mau uso dos hiperparâmetros. De qualquer forma, também não é um resultado satisfatório para a previsão dos nossos dados.
+Na tabela obtida, é possível verificar bastantes missmatches entre os valores previstos pelo modelo e os valores reais. Calculando a sua precisão, verificou-se uma precisão de 57%, bastante mais baixa que o modelo anterior, podendo significar uma aleatoriedade do modelo criado. Isso pode acontecer devido a um mau tratamento de dados, má escolha de classes, ou mau uso dos hiperparâmetros. De qualquer forma, também não é um resultado satisfatório para a previsão dos nossos dados.
+
 
