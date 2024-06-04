@@ -32,7 +32,7 @@ O conjunto de dados selecionados para este trabalho foram retirados de um estudo
 
 Este trabalho tem como objetivo analisar os dados de expressão de pacientes com AML, comparando os seus dados transcriptómicos de acordo com o sexo, tipo de amostra e tratamentos cumulativos dados aos pacientes, com vista a obter informações sobre genes possivelmente expressos diferencialmente e/ou enriquecidos, que tenham um papel importante no tratamento da doença e na sobrevivência dos pacientes.
 
-```{r Import dos packages, echo=FALSE}
+```{r Import dos packages, echo=FALSE, warning=FALSE}
 library(summarytools)
 library(car)
 library(readr)
@@ -51,6 +51,7 @@ library(caret)
 library(randomForest)
 library(party)
 library(e1071)
+library(pheatmap)
 ```
 
 # **Datasets**
@@ -805,10 +806,10 @@ RNA_cpm_filtered = RNA_cpm[selected_genes, ]
 RNA_cpm_filtered = RNA_cpm_filtered[, -1]
 
 logCPM = log2(RNA_cpm_filtered + 1)
-head(logCPM)
 
 y <- DGEList(counts = logCPM, genes = row.names(logCPM))
 ```
+
 Depois da filtragem, ficámos com 14405 genes para a análise de expressão diferencial.
 
 ## Variável: Sexo {.tabset}
@@ -1088,15 +1089,13 @@ Dada a expressão diferencial analisada anteriormente e os resultados obtidos nu
 ## Classical Multidimensional Scaling
 
 ```{r MDS plot}
-dist_matrix = dist(t(RNA_cpm_filtered))
+dist_matrix = dist(t(logCPM))
 
 mds_result = cmdscale(dist_matrix, k = 2)  # k = 2 para duas dimensões
 
 mds_data = as.data.frame(mds_result)
 colnames(mds_data) = c("Dim1", "Dim2")
 mds_data$Sample = rownames(mds_data)
-
-mds_data = merge(mds_data, metadados, by.x = "Sample", by.y = "SAMPLE_ID")
 
 ggplot(mds_data, aes(x = Dim1, y = Dim2, label = Sample)) +
   geom_point() +
@@ -1105,38 +1104,14 @@ ggplot(mds_data, aes(x = Dim1, y = Dim2, label = Sample)) +
   theme_minimal()
 ```
 
-Através da interpretação do MDS plot obtido, vemos que apenas aproximadamente 4 amostras cujos níveis de expressão são mais diferentes, estão mais distantes do resto das amostras. Esta semelhança nos níveis de expressão já era expectada dado os resultados da análise de expressão diferencial que não indicaram uma grande quantidade de genes diferencialmente expressos.
+Através da interpretação do MDS plot obtido, vemos que há semelhança nos níveis de expressão, algo já esperado dado os resultados da análise de expressão diferencial que não indicaram uma grande quantidade de genes diferencialmente expressos.
 Adicionalmente, este resultado também sugere que possivelmente não haverá uma formação de clusteres com estas amostras, porém para o comprovar foi feito o clustering de genes de acordo com algumas variáveis como o sexo, o estado de sobrevivência do paciente e as classificações ENL.
 
-## Clustering de genes de acordo com o sexo dos pacientes
+## Clustering Hierárquico
+Após o MDS plot, os 50 genes com uma maior expressão diferencial foram filtrados e agrupados de acordo com a sua similaridade através de algoritmos de clustering hierárquico, para visualizar a possível existência e hierarquia de clusteres tendo em conta a expressão dos genes.
 
-```{r MDS sex}
-ggplot(mds_data, aes(x = Dim1, y = Dim2, color = SEX, label = Sample)) +
-  geom_point(size = 3) +
-  geom_text(vjust = 1.5, size = 3) +
-  labs(title = "MDS Plot Colorido por Sexo", x = "Dimension 1", y = "Dimension 2") +
-  theme_minimal() +
-  scale_color_manual(values = c("red", "blue", "green", "purple"))
-```
-
-```{r hierarquico - sexo}
-# Preparação dos dados: 
-DADOS = t(logCPM) #Transpor os dados
-metadados$SEX = as.factor(metadados$SEX)
-logCPM_metadados = cbind(DADOS, metadados)
-
-#Clustering
-logCPM_metadados.sc = scale(logCPM_metadados[,1:14405])
-dist.logCPM_metadados = dist(logCPM_metadados.sc, method = "manhattan")
-cl.logCPM_metadados = hclust(dist.logCPM_metadados, method = "average")
-my.plot.hc = function(hclust, lab = 1:length(hclust$order), lab.col = rep(1, length(hclust$order)), hang = 0.1, ...)
-  
-my.plot.hc(cl.logCPM_metadados, lab.col = as.integer(logCPM_metadados$SEX)+1, cex = 0.6)
-```
-
-```{r}
+```{r - preparação para clustering - seleção de dados com alta variação de exp}
 logCPM_matrix <- as.matrix(logCPM)
-
 class(logCPM_matrix) <- 'numeric'
 max_logCPM_matrix <- apply(logCPM_matrix, 1, max)
 min_logCPM_matrix <- apply(logCPM_matrix, 1, min)
@@ -1157,24 +1132,28 @@ genes_top50 = logCPM_matrix[p_value, ]
 ```
 
 ```{r matriz de distancias}
-distxy <- dist(genes_top50, method = 'euclidean')
-hc = hclust(distxy, method = 'complete')
+dist_top50 <- dist(genes_top50, method = 'euclidean')
+hc = hclust(dist_top50, method = 'ward.D2')
 plot(hc)
 ```
 
-```{r}
-hcd <- as.dendrogram(hc)
-nodePar <- list(lab.cex = 0.6, pch = c(NA,20), cex = 0.8, col = "lightgreen")
-plot(hcd, ylab = "Height", nodePar = nodePar, horiz = TRUE, edgePar = list(col = 2:3, lwd = 2:1))
-```
+Através do clustering hierárquico é possível ver que são formados dois grandes clusteres, indicando que pode ser possível agrupar os genes em 2 clusteres, porém após pesquisa dos genes presentes nos clusteres nenhuma relação clara foi estabelecida. 
 
-Através do clustering hierárquico é possível ver que há uma relação entre os genes sendo possível agrupá-los em alguns clusteres.
+## Clustering de genes de acordo com o sexo dos pacientes
+
+```{r clustering hierarquico - sexo}
+cluster <- hclust(dist_matrix, method = "ward.D2")  # Ward's method for linkage
+
+plot(cluster, main = "Clustering hierárquico tendo em conta o sexo dos pacientes")
+rect.hclust(cluster, k = 2, border = "red")  
+
+```
 
 ```{r}
 heatmap(genes_top50, labCol = sort(metadados$SEX))
 ```
 
-O heatmap não revela nenhum padrão de expressão génica entre homens e mulheres, não havendo o agrupamento de genes em dois clusteres associados ao sexo.
+Enquanto continuamos a ver os dendogramas com 2 grandes clusteres, a análise do heatmap não revela nenhum padrão de expressão génica entre homens e mulheres, não havendo o agrupamento de genes em dois clusteres associados ao sexo.
 
 ## Clustering de genes de acordo com a sobrevivência dos pacientes
 
@@ -1182,22 +1161,55 @@ O heatmap não revela nenhum padrão de expressão génica entre homens e mulher
 heatmap(genes_top50, labCol = sort(metadados$OS_STATUS))
 ```
 
-Através da análise do heatmap não se consegue distinguir padrões ou clusteres para a sobrevivência dos pacientes baseado na expressão génica.
+Da mesma forma, a análise do heatmap não revela padrões ou clusteres para a sobrevivência dos pacientes baseado na expressão génica.
+
 
 ```{r}
 set.seed(123)
 logCPM_matrix <- logCPM_matrix[1:length(metadados$OS_STATUS)]
-centers <- cut(logCPM_matrix, breaks = 4)
+centers <- cut(logCPM_matrix, breaks = 3)
 centers_factor <- factor(centers)
 live_factor <- factor(metadados$OS_STATUS)
 
-levels(centers_factor) <- c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4")
+levels(centers_factor) <- c("Cluster 1", "Cluster 2", "Cluster 3")
 
 table <- table(centers_factor, live_factor)
 print(table)
 ```
 
-Em contraste, ao distribuir os genes em diferentes clusteres tendo em conta o estado de sobrevivência dos pacientes, obtivémos resultados que sugerem que os genes nos diferentes clusters podem estar envolvidos em diferentes processos biológicos dado que há uma distribuição diferente dos genes pelos 4 clusteres. É interessante destacar que há um nº mais elevado de genes no Cluster 2, o que pode indicar uma possível associação destes com algum processo biológico mais importante para a sobrevivência do que os genes nos outros clusters. 
+Em contraste, ao distribuir os genes em 3 diferentes clusteres tendo em conta o estado de sobrevivência dos pacientes, obtivémos resultados que sugerem que os genes nos diferentes clusters podem estar envolvidos em diferentes processos biológicos dado que há uma distribuição diferente dos genes pelos 3 clusteres que parece não estar relacionada com o estado de sobrevivência dos pacientes. É interessante destacar que há um nº mais elevado de genes no Cluster 2, o que pode indicar uma possível associação destes com algum processo biológico mais importante para a sobrevivência do que os genes nos outros clusters. 
+
+## Clustering de genes de acordo com a classificação ELN 2017
+
+```{r CLUSTERNG ELN 2017}
+set.seed(123)
+logCPM_matrix <- logCPM_matrix[1:length(metadados$ELN_2017)]
+centers <- cut(logCPM_matrix, breaks = 6)
+centers_factor <- factor(centers)
+eln17_factor <- factor(metadados$ELN_2017)
+
+levels(centers_factor) <- c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6")
+
+table <- table(centers_factor, eln17_factor)
+print(table)
+```
+
+## Clustering de genes de acordo com a classificação ELN 2008
+
+```{r}
+set.seed(123)
+logCPM_matrix <- logCPM_matrix[1:length(metadados$ELN_2008)]
+centers <- cut(logCPM_matrix, breaks = 5)
+centers_factor <- factor(centers)
+eln08_factor <- factor(metadados$ELN_2017)
+
+levels(centers_factor) <- c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5")
+
+table <- table(centers_factor, eln08_factor)
+print(table)
+```
+
+Para a análise do clustering de genes tendo em conta as classificações ELN de 2017 e 2008, os dados foram agrupados aleatóriamente num determinado nº de clusteres consoante as diferentes classificações usadas em cada ano (6 clusteres para a ELN 2017 e 5 para 2008). Os clusteres formados não aparentam ter um padrão de distribuição que possa sugerir que os dados de expressão génica possam ser associados e agrupados de acordo com as diferentes classificações.
 
 # **Redução da dimensionalidade**
 
@@ -1205,10 +1217,11 @@ A análise não supervisionada será aplicada nos dados de expressão genética 
 
 ## Processamento dos dados: 
 ```{r}
+
 # União dos dados com metadados relevantes para análises:
 row.names(metadados) <- metadados$SAMPLE_ID
 metadados_select = metadados[,c("SAMPLE_SITE", "OS_STATUS", "CUMULATIVE_TREATMENT_STAGE_COUNT", "CUMULATIVE_TREATMENT_TYPE_COUNT", "ELN_2017", "ELN_2008")]
-merged_df <- merge(DADOS, metadados_select, by = "row.names")
+merged_df <- merge(t(logCPM), metadados_select, by = "row.names")
 row.names(merged_df) <- merged_df$Row.names
 merged_df = merged_df[, -1]
 
@@ -1517,25 +1530,9 @@ precisao_NB_2008
 
 Na tabela obtida, é possível verificar bastantes missmatches entre os valores previstos pelo modelo e os valores reais. Calculando a sua precisão, verificou-se uma precisão de 46% para a previsão do ELN_2017 e 56% para a previsão do ELN_2008, valores ligeiramente mais baixos que o modelo anterior, podendo significar uma aleatoriedade do modelo criado. Isso pode acontecer devido a um mau tratamento de dados, má escolha de classes, ou mau uso dos hiperparâmetros. De qualquer forma, também não é um resultado satisfatório para a previsão dos nossos dados.
 
-## Importância de genes:
+# Conclusão
 
-```{r}
-set.seed(16718)
-dados_treino_2017 <- na.omit(dados_treino_2017)
-dados_teste_2017 <- na.omit(dados_teste_2017)
-
-# Configurar o controle para RFE
-control <- rfeControl(functions = rfFuncs, method = "cv", number = 10)
-
-# Executar o RFE
-results <- rfe(dados_treino_2017[ , !names(dados_treino_2017) %in% c("ELN_2017")], dados_treino_2017$ELN_2017, 
-               rfeControl = control, sizes = c(1:10, 20, 40, 60, 80, 100))
-
-# Obter as variáveis mais importantes
-important_vars <- predictors(results)
-print(important_vars)
-```
-
+Não foram encontradas associações entre a expressão de determinados genes e o sexo, sobrevivência ou classificação de pacientes consoante as regras ELN de 2017 e 2008.
 
 
 
